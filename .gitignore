@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/lox
+lox.so
+lox.dylib
+lox.dll
+lox.a
+lox.lib
+lox-test-*
+*.exe
+*.o
+*.obj
+*.lst
+*.dlox_history

@@ -1,0 +1,12 @@
+{
+	"authors": [
+		"Ashymad"
+	],
+	"copyright": "Copyright © 2022, Ashymad",
+	"dependencies": {
+		"linenoise": "~>1.1.0"
+	},
+	"description": "lox interpreter in D",
+	"license": "MIT",
+	"name": "dlox"
+}
