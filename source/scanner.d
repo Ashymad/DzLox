@@ -4,6 +4,7 @@ import std.container;
 import std.format;
 import std.conv;
 import app;
+import keywords;
 
 class Scanner {
     private string source;
@@ -11,24 +12,25 @@ class Scanner {
     private int current = 0;
     private int line = 0;
 
-    private Array!Token tokens;
+    private Array!TokenI tokens;
 
     this(string source) {
         this.source = source;
-        this.tokens = Array!Token();
+        this.tokens = Array!TokenI();
     }
 
     this(char[] source) {
         this.source = to!string(source);
-        this.tokens = Array!Token();
+        this.tokens = Array!TokenI();
     }
 
-    Array!Token scanTokens() {
+    Array!TokenI scanTokens() {
         while (!isAtEnd()) {
             start = current;
             scanToken();
         }
-        tokens.insert(new Token(TokenType.EOF, "", null, line));
+        start = current;
+        addToken(TokenType.EOF);
         return tokens;
     }
 
@@ -46,6 +48,8 @@ class Scanner {
                 case '+': addToken(PLUS); break;
                 case ';': addToken(SEMICOLON); break;
                 case '*': addToken(STAR); break;
+                case '?': addToken(QUERY); break;
+                case ':': addToken(COLON); break;
                 case '!':
                       addToken(match('=') ? BANG_EQUAL : BANG);
                       break;
@@ -59,22 +63,7 @@ class Scanner {
                       addToken(match('=') ? GREATER_EQUAL : GREATER);
                       break;
                 case '/':
-                      if (match('/')) {
-                          // A comment goes until the end of the line.
-                          while (peek() != '\n' && !isAtEnd()) advance();
-                      } else if (match('*')) {
-                          int nest = 1;
-                          while (nest > 0) {
-                              while ((peek() != '*' || peekNext() != '/') && !isAtEnd()) {
-                                  if (peek() == '\n') line++;
-                                  if (peek() == '/' && peekNext() == '*') nest++;
-                                  advance();
-                              }
-                              advance();
-                              advance();
-                              nest--;
-                          }
-                      } else {
+                      if (!skipComment()) {
                           addToken(SLASH);
                       }
                       break;
@@ -89,12 +78,35 @@ class Scanner {
                 default: 
                       if (isDigit(c)) {
                           numberToken();
+                      } else if (isAlpha(c)) {
+                          identifierToken();
                       } else {
                           Lox.error(line, format("Unexpected character: %c", c));
                       }
                       break;
             }
         }
+    }
+
+    private bool skipComment() {
+        if (match('/')) {
+            while (peek() != '\n' && !isAtEnd()) advance();
+            return true;
+        } else if (match('*')) {
+            int nest = 1;
+            while (nest > 0) {
+                while ((peek() != '*' || peekNext() != '/') && !isAtEnd()) {
+                    if (peek() == '\n') line++;
+                    if (peek() == '/' && peekNext() == '*') nest++;
+                    advance();
+                }
+                advance();
+                advance();
+                nest--;
+            }
+            return true;
+        }
+        return false;
     }
 
     private char peekNext() {
@@ -145,6 +157,24 @@ class Scanner {
         return source[current];
     }
 
+    private void identifierToken() {
+        while (isAlphaNumeric(peek())) advance();
+
+        string text = source[start..current];
+        TokenType type = keywords.keywords.get(text, TokenType.IDENTIFIER);
+        addToken(type);
+    }
+
+    private bool isAlpha(char c) {
+        return (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            c == '_';
+    }
+
+    private bool isAlphaNumeric(char c) {
+        return isAlpha(c) || isDigit(c);
+    }
+
     private bool match(char expected) {
         if (isAtEnd()) return false;
         if (source[current] != expected) return false;
@@ -163,7 +193,7 @@ class Scanner {
 
     private void addToken(T)(TokenType type, T literal) {
         string text = source[start..current];
-        tokens.insert(new Token(type, text, literal, line));
+        tokens.insert(TokenI(type, text, literal, line));
     }
     private bool isAtEnd() {
         return current >= source.length;

@@ -1,25 +1,50 @@
 import tokentype;
 import std.conv;
 import std.variant;
+import std.format;
 
-class Token {
-    immutable TokenType type;
-    immutable string lexeme;
-    const Variant literal;
-    immutable int line;
+interface TokenI {
+    void toString(scope void delegate(const(char)[]) sink) const;
+    static Token!T opCall(T)(TokenType type, string lexeme, T literal, int line) {
+        return new Token!T(type, lexeme, literal, line);
+    }
+    @property Variant literal();
+    @property string lexeme() const;
+    @property TokenType type() const;
+    @property int line() const;
+}
 
-    this(T)(TokenType type, string lexeme, T literal, int line) {
-        this.type = type;
-        this.lexeme = lexeme;
-        this.literal = literal;
-        this.line = line;
+class Token(T) : TokenI {
+    const TokenType _type;
+    const string _lexeme;
+    T _literal;
+    const int _line;
+
+    this(TokenType type, string lexeme, T literal, int line) {
+        _type = type;
+        _lexeme = lexeme;
+        _literal = literal;
+        _line = line;
     }
 
     void toString(scope void delegate(const(char)[]) sink) const {
-        sink(text(type));
-        sink(" ");
-        sink(lexeme);
-        sink(" ");
-        sink(text(line));
+        sink(format("Token!(%s)(%s, %s, %s, %s)",
+                    T.stringof, _type, _lexeme, _literal, _line));
     }
+
+    @property Variant literal() {
+        return Variant(_literal);
+    }
+
+    @property string lexeme() const {
+        return _lexeme;
+    }
+
+    @property TokenType type() const {
+        return _type;
+    }
+    @property int line() const {
+        return _line;
+    }
+
 }

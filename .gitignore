@@ -14,3 +14,4 @@ lox-test-*
 *.obj
 *.lst
 *.dlox_history
+dlox
