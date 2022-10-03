@@ -12,9 +12,16 @@ declaration    → varDecl
                | statement ;
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 statement      → exprStmt
-               | printStmt 
+               | forStmt
                | ifStmt
+               | printStmt 
+               | whileStmt
+               | breakStmt
                | block ;
+forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+                 expression? ";"
+                 expression? ")" statement ;
+whileStmt      → "while" "(" expression ")" statement ;
 ifStmt         → "if" "(" expression ")" statement
                ( "else" statement )? ;
 block          → "{" declaration* "}" ;
@@ -46,6 +53,7 @@ class Parser {
 
     private Array!TokenI tokens;
     private int current = 0;
+    private bool breakAllowed = false;
 
     this(Array!TokenI tokens) {
         this.tokens = tokens;
@@ -79,13 +87,71 @@ class Parser {
     }
 
     private Stmt matchStatement() {
-        if (match(TokenType.PRINT))
-            return statement!(Print)(expression());
-        if (match(TokenType.LEFT_BRACE))
-            return statement!(Block)(block());
+        if (match(TokenType.FOR))
+            return forStatement();
         if (match(TokenType.IF))
             return ifStatement();
+        if (match(TokenType.PRINT))
+            return statement!(Print)(expression());
+        if (match(TokenType.WHILE))
+            return whileStatement();
+        if (match(TokenType.LEFT_BRACE))
+            return statement!(Block)(block());
+        if (match(TokenType.BREAK))
+            return breakStatement();
         return statement!(Expression)(expression());
+    }
+    
+    private Stmt breakStatement() {
+        if (breakAllowed) {
+            return statement!(Break)();
+        } else {
+            throw error(previous(), "Break not allowed here.");
+        }
+    }
+
+    private Stmt forStatement() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+
+        Stmt initializer;
+
+        if (match(TokenType.SEMICOLON)) {
+            initializer = null;
+        } else if (match(TokenType.VAR)) {
+            initializer = varDeclaration();
+        } else {
+            initializer = statement!(Expression)(expression());
+        }
+
+        Expr condition = null;
+        if (!check(TokenType.SEMICOLON)) {
+            condition = expression();
+        }
+        consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
+
+        Expr increment = null;
+        if (!check(TokenType.RIGHT_PAREN)) {
+            increment = expression();
+        }
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        breakAllowed = true;
+        Stmt bod = matchStatement();
+        breakAllowed = false;
+
+        if (increment !is null) {
+            bod = new Block([bod, new Expression(increment)]);
+        }
+        if (condition is null) {
+            condition = new Literal(Variant(true));
+        }
+
+        bod = new While(condition, bod);
+        if (initializer !is null) {
+            bod = new Block([initializer, bod]);
+        }
+
+        return bod;
     }
 
     private Stmt ifStatement() {
@@ -101,6 +167,17 @@ class Parser {
         }
 
         return statement!(If)(condition, thenBranch, elseBranch);
+    }
+
+    private Stmt whileStatement() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+        Expr condition = expression();
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+        breakAllowed = true;
+        Stmt bod = matchStatement();
+        breakAllowed = false;
+
+        return statement!(While)(condition, bod);
     }
 
     private Stmt[] block() {

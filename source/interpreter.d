@@ -14,9 +14,15 @@ import environment;
 
 class Interpreter : stmt.Visitor, expr.Visitor {
     Variant value;
-    static Environment environment;
+    Environment environment;
 
-    static this() {
+    private class BreakCalled : Exception {
+        this() {
+            super("", "", 0);
+        }
+    }
+
+    this() {
         environment = new Environment();
     }
 
@@ -72,6 +78,19 @@ class Interpreter : stmt.Visitor, expr.Visitor {
         } else if (stmt.elseBranch !is null) {
             execute(stmt.elseBranch);
         }
+    }
+
+    void visit(Break _) {
+        throw new BreakCalled();
+    }
+
+    void visit(While stmt) {
+        while (isTruthy(evaluate(stmt.condition))) {
+            try {
+                execute(stmt.bod);
+            } catch (BreakCalled _) break;
+        }
+        value = null;
     }
 
     void executeBlock(Stmt[] statements, Environment environment) {

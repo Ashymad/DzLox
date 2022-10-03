@@ -32,6 +32,12 @@ class Lox {
     static bool hadError = false;
     static bool hadRuntimeError = false;
 
+    Interpreter interpreter;
+
+    this() {
+        interpreter = new Interpreter();
+    }
+
     extern(C) static void completion(const char *buf, linenoiseCompletions *lc) {
         auto bufs = fromStringz(buf);
         auto lastsp = 1 + lastIndexOfAny(bufs, [
@@ -77,7 +83,6 @@ class Lox {
         auto expression = parser.parse();
         if(hadError) return;
 
-        Interpreter interpreter = new Interpreter();
         auto result = interpreter.interpret(expression);
         if(hadError) return;
 

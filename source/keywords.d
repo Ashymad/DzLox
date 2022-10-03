@@ -21,6 +21,7 @@ shared static this() {
             "true":   TRUE,
             "var":    VAR,
             "while":  WHILE,
+            "break":  BREAK,
             "ast":    AST,
         ];
     }

@@ -9,6 +9,8 @@ static immutable string[][] statements = [
         ["Var", "TokenI name", "Expr initializer"],
         ["Block", "Stmt[] statements"],
         ["If", "Expr condition", "Stmt thenBranch", "Stmt elseBranch"],
+        ["While", "Expr condition", "Stmt bod"],
+        ["Break"]
 ];
 
 mixin(GenVisitor!(statements) ~ GenVisitee!("Stmt", statements));
