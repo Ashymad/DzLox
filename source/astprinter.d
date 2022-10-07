@@ -1,9 +1,9 @@
 import std.conv;
 import std.algorithm.iteration;
 import std.array;
-import expr;
+import ast;
 
-class AstPrinter : Visitor {
+class AstPrinter : ExprVisitor {
     string printed;
 
     string print(Expr expr) {
@@ -35,8 +35,14 @@ class AstPrinter : Visitor {
         if (literal.value == null) printed = "nil";
         printed = literal.value.toString();
     }
+    void visit(Function fun) {
+        printed = "(fun (" ~ fun.params.map!(p => p.lexeme).join(" ") ~  ") {...})";
+    }
     void visit(Unary unary) {
         printed = parenthesize(unary.operator.lexeme, unary.right);
+    }
+    void visit(Call call) {
+        printed = parenthesize("call", call.callee ~ call.arguments);
     }
     private string parenthesize(string name, Expr[] exprs ...) {
         return "(" ~ name ~ " " ~ exprs.map!(e => print(e)).join(" ") ~  ")";

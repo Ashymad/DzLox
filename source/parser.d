@@ -2,22 +2,27 @@ import token;
 import tokentype;
 import std.container;
 import std.variant;
-import expr;
-import stmt;
+import ast;
 import app;
 
 /*
 program        → statement* EOF ;
-declaration    → varDecl
+declaration    → funDecl
+               | varDecl
                | statement ;
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 statement      → exprStmt
                | forStmt
                | ifStmt
                | printStmt 
+               | returnStmt
                | whileStmt
                | breakStmt
                | block ;
+returnStmt     → "return" expression? ";" ;
+funDecl        → "fun" IDENTIFIER function ;
+function       → "(" parameters? ")" block ;
+parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
                  expression? ")" statement ;
@@ -39,9 +44,12 @@ comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" ) unary )* ;
 unary          → ( "!" | "-" | "ast" ) unary
-               | primary ;
+               | call ;
+call           → funExpr ( "(" arguments? ")" )* ;
+funExpr        → "fun" function ;
 primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")" | IDENTIFIER ;
+arguments      → expression ( "," expression )* ;
 */
 
 class Parser {
@@ -53,7 +61,8 @@ class Parser {
 
     private Array!TokenI tokens;
     private int current = 0;
-    private bool breakAllowed = false;
+    private int breakAllowed = 0;
+    private int returnAllowed = 0;
 
     this(Array!TokenI tokens) {
         this.tokens = tokens;
@@ -71,12 +80,36 @@ class Parser {
         try {
             if (match(TokenType.VAR))
                 return varDeclaration();
-            else
+            if (check(TokenType.FUN) && peekNext().type == TokenType.IDENTIFIER) {
+                advance();
+                return statement!(Var)(advance(), fun());
+            } else {
                 return matchStatement();
+            }
         } catch (ParseError err) {
             synchronize();
             return null;
         }
+    }
+
+    private Expr fun() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' at function declaration.");
+        TokenI[] parameters = [];
+        if (!check(TokenType.RIGHT_PAREN)) {
+            do {
+                if (parameters.length >= 255) {
+                    error(peek(), "Can't have more than 255 parameters.");
+                }
+
+                parameters ~= consume(TokenType.IDENTIFIER, "Expect parameter name.");
+            } while (match(TokenType.COMMA));
+        }
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
+        consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
+        returnAllowed++;
+        Stmt[] bod = block();
+        returnAllowed--;
+        return new Function(parameters, bod);
     }
     
     private Stmt varDeclaration() {
@@ -95,6 +128,8 @@ class Parser {
             return statement!(Print)(expression());
         if (match(TokenType.WHILE))
             return whileStatement();
+        if (match(TokenType.RETURN))
+            return returnStatement();
         if (match(TokenType.LEFT_BRACE))
             return statement!(Block)(block());
         if (match(TokenType.BREAK))
@@ -104,9 +139,22 @@ class Parser {
     
     private Stmt breakStatement() {
         if (breakAllowed) {
-            return statement!(Break)();
+            return statement!(Break)(previous());
         } else {
             throw error(previous(), "Break not allowed here.");
+        }
+    }
+
+    private Stmt returnStatement() {
+        TokenI keyword = previous();
+        if (returnAllowed) {
+            Expr value = null;
+            if (!check(TokenType.SEMICOLON) && !check(TokenType.RIGHT_BRACE)) {
+                value = expression();
+            }
+            return statement!(Return)(keyword, value);
+        } else {
+            throw error(keyword, "Return not allowed here.");
         }
     }
 
@@ -135,9 +183,9 @@ class Parser {
         }
         consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
 
-        breakAllowed = true;
+        breakAllowed++;
         Stmt bod = matchStatement();
-        breakAllowed = false;
+        breakAllowed--;
 
         if (increment !is null) {
             bod = new Block([bod, new Expression(increment)]);
@@ -173,9 +221,9 @@ class Parser {
         consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
         Expr condition = expression();
         consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
-        breakAllowed = true;
+        breakAllowed++;
         Stmt bod = matchStatement();
-        breakAllowed = false;
+        breakAllowed--;
 
         return statement!(While)(condition, bod);
     }
@@ -269,9 +317,52 @@ class Parser {
         with (TokenType) if (match(BANG, MINUS, AST)) {
             TokenI operator = previous();
             Expr right = primary();
+            if (operator.type == AST) {
+                if(Grouping gr = cast(Grouping)right) {
+                    right = gr.expression;
+                }
+            }
             return new Unary(operator, right);
         }
+        return call();
+    }
+
+    private Expr call() {
+        Expr expr = funExpr();
+
+        while (true) { 
+            if (match(TokenType.LEFT_PAREN)) {
+                expr = finishCall(expr);
+            } else {
+                break;
+            }
+        }
+
+        return expr;
+    }
+
+    private Expr funExpr() {
+        if (match(TokenType.FUN)) {
+            return fun();
+        }
         return primary();
+    }
+
+    private Expr finishCall(Expr callee) {
+        Expr[] arguments = [];
+
+        if (!check(TokenType.RIGHT_PAREN)) {
+            do {
+                if (arguments.length >= 255) {
+                    error(peek(), "Can't have more than 255 arguments.");
+                }
+                arguments ~= assignment();
+            } while (match(TokenType.COMMA));
+        }
+
+        TokenI paren = consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
+
+        return new Call(callee, paren, arguments);
     }
 
     private Expr primary() {

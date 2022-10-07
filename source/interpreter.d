@@ -1,29 +1,50 @@
-import expr;
-import stmt;
 import std.variant;
-import tokentype;
-import token;
 import std.format;
-import error;
-import app;
 import std.algorithm;
-import astprinter;
 import std.stdio;
 import std.container;
+import std.datetime.systime;
+import ast;
+import tokentype;
+import token;
+import error;
+import app;
+import astprinter;
 import environment;
+import callable;
+import fun;
 
-class Interpreter : stmt.Visitor, expr.Visitor {
+class Interpreter : StmtVisitor, ExprVisitor {
     Variant value;
     Environment environment;
+    Environment globals;
 
-    private class BreakCalled : Exception {
+    class BreakCalled : Exception {
         this() {
             super("", "", 0);
         }
     }
 
+    class ReturnCalled : Exception {
+        Variant value;
+        this(Variant value) {
+            this.value = value;
+            super("", "", 0);
+        }
+    }
+
     this() {
-        environment = new Environment();
+        globals = new Environment();
+        environment = globals;
+        
+        globals.define("clock", Variant(new class Callable {
+                    ulong arity() {
+                        return 0;
+                    }
+                    Variant call(Interpreter _, Variant[] __) {
+                        return Variant(stdTimeToUnixTime(Clock.currStdTime()));
+                    }
+        }));
     }
 
     string interpret(Array!Stmt statements) {
@@ -84,6 +105,10 @@ class Interpreter : stmt.Visitor, expr.Visitor {
         throw new BreakCalled();
     }
 
+    void visit(Return ret) {
+        throw new ReturnCalled(ret.value is null ? Variant(null) : evaluate(ret.value));
+    }
+
     void visit(While stmt) {
         while (isTruthy(evaluate(stmt.condition))) {
             try {
@@ -104,6 +129,29 @@ class Interpreter : stmt.Visitor, expr.Visitor {
         } finally {
             this.environment = previous;
         }
+    }
+
+    void visit(Function expr) {
+        value = new Fun(expr, environment);
+    }
+
+    void visit(Call expr) {
+        Variant callee = evaluate(expr.callee);
+        Variant[] arguments = [];
+
+        foreach(arg; expr.arguments) {
+            arguments ~= evaluate(arg);
+        }
+
+        if (!callee.convertsTo!(Callable)) {
+            throw new RuntimeError(expr.paren, "Expression result is not callable");
+        }
+        Callable fun = callee.get!(Callable);
+        if (arguments.length != fun.arity()) {
+            throw new RuntimeError(expr.paren,
+                    format("Expected %s arguments but got %s.", fun.arity(), arguments.length));
+        }
+        value = fun.call(this, arguments);
     }
 
     void visit(Assign expr) {
