@@ -243,7 +243,6 @@ class Parser {
         if (!isAtEnd()
                 && !match(TokenType.SEMICOLON)
                 && !check(TokenType.RIGHT_BRACE)
-                && !check(TokenType.ELSE)
                 && previous().type != TokenType.SEMICOLON
                 && previous().type != TokenType.RIGHT_BRACE)
             error(previous(), "Expect ';' after value.");
