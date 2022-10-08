@@ -15,9 +15,10 @@ import callable;
 import fun;
 
 class Interpreter : StmtVisitor, ExprVisitor {
-    Variant value;
-    Environment environment;
-    Environment globals;
+    private Variant value;
+    private Environment environment;
+    private Environment globals;
+    private size_t[Expr] locals;
 
     class BreakCalled : Exception {
         this() {
@@ -36,6 +37,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
     this() {
         globals = new Environment();
         environment = globals;
+        locals = null;
         
         globals.define("clock", Variant(new class Callable {
                     ulong arity() {
@@ -47,7 +49,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
         }));
     }
 
-    string interpret(Array!Stmt statements) {
+    string interpret(Stmt[] statements) {
         try {
             foreach(statement; statements) {
                 execute(statement);
@@ -64,6 +66,10 @@ class Interpreter : StmtVisitor, ExprVisitor {
         string str = var.toString();
 
         return str;
+    }
+
+    void resolve(Expr expr, size_t depth) {
+        locals[expr] = depth;
     }
 
     private void execute(Stmt stmt) {
@@ -156,15 +162,24 @@ class Interpreter : StmtVisitor, ExprVisitor {
 
     void visit(Assign expr) {
         Variant variant = evaluate(expr.value);
-        environment.assign(expr.name, variant);
+        if(size_t* distance = expr in locals) {
+            environment.assignAt(expr.name, value, *distance);
+        } else {
+            globals.assign(expr.name, variant);
+        }
         value = variant;
     }
 
     void visit(Variable expr) {
-        Variant var = environment.get(expr.name);
-        if (!var.hasValue())
-            throw new RuntimeError(expr.name, "Variable is not initialized.");
-        value = var;
+        value = lookUpVariable(expr.name, expr);
+    }
+
+    private Variant lookUpVariable(TokenI name, Expr expr) {
+        if(size_t* distance = expr in locals) {
+            return environment.getAt(name, *distance);
+        } else {
+            return globals.get(name);
+        }
     }
 
     void visit(Logical expr) {

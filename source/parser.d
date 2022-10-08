@@ -61,17 +61,15 @@ class Parser {
 
     private Array!TokenI tokens;
     private int current = 0;
-    private int breakAllowed = 0;
-    private int returnAllowed = 0;
 
     this(Array!TokenI tokens) {
         this.tokens = tokens;
     }
 
-    Array!Stmt parse() {
-        Array!Stmt statements = Array!Stmt();
+    Stmt[] parse() {
+        Stmt[] statements;
         while (!isAtEnd()) {
-            statements.insert(declaration());
+            statements ~= declaration();
         }
         return statements;
     }
@@ -106,9 +104,7 @@ class Parser {
         }
         consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
         consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
-        returnAllowed++;
         Stmt[] bod = block();
-        returnAllowed--;
         return new Function(parameters, bod);
     }
     
@@ -138,24 +134,16 @@ class Parser {
     }
     
     private Stmt breakStatement() {
-        if (breakAllowed) {
-            return statement!(Break)(previous());
-        } else {
-            throw error(previous(), "Break not allowed here.");
-        }
+        return statement!(Break)(previous());
     }
 
     private Stmt returnStatement() {
         TokenI keyword = previous();
-        if (returnAllowed) {
-            Expr value = null;
-            if (!check(TokenType.SEMICOLON) && !check(TokenType.RIGHT_BRACE)) {
-                value = expression();
-            }
-            return statement!(Return)(keyword, value);
-        } else {
-            throw error(keyword, "Return not allowed here.");
+        Expr value = null;
+        if (!isAtEnd() && !check(TokenType.SEMICOLON) && !check(TokenType.RIGHT_BRACE)) {
+            value = expression();
         }
+        return statement!(Return)(keyword, value);
     }
 
     private Stmt forStatement() {
@@ -183,9 +171,7 @@ class Parser {
         }
         consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
 
-        breakAllowed++;
         Stmt bod = matchStatement();
-        breakAllowed--;
 
         if (increment !is null) {
             bod = new Block([bod, new Expression(increment)]);
@@ -221,9 +207,7 @@ class Parser {
         consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
         Expr condition = expression();
         consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
-        breakAllowed++;
         Stmt bod = matchStatement();
-        breakAllowed--;
 
         return statement!(While)(condition, bod);
     }

@@ -28,6 +28,15 @@ class Environment {
         return value;
     }
 
+    Environment ancestor(size_t distance) {
+        Environment environment = this;
+        foreach(_; 0..distance) {
+            environment = environment.enclosing;
+        }
+
+        return environment;
+    }
+
     Variant get(TokenI name) {
         return *find(name);
     }
@@ -35,4 +44,13 @@ class Environment {
     void assign(TokenI name, Variant new_value) {
         *find(name) = new_value;
     }
+    
+    Variant getAt(TokenI name, size_t distance) {
+        return ancestor(distance).values[name.lexeme];
+    }
+
+    void assignAt(TokenI name, Variant value, size_t distance) {
+        ancestor(distance).values[name.lexeme] = value;
+    }
+
 }

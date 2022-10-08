@@ -12,6 +12,7 @@ import ast;
 import parser;
 import error;
 import interpreter;
+import resolver;
 
 int main(string[] args) {
     Lox lox = new Lox;
@@ -32,10 +33,12 @@ class Lox {
     static bool hadError = false;
     static bool hadRuntimeError = false;
 
+    Resolver resolver;
     Interpreter interpreter;
 
     this() {
         interpreter = new Interpreter();
+        resolver = new Resolver(interpreter);
     }
 
     extern(C) static void completion(const char *buf, linenoiseCompletions *lc) {
@@ -81,6 +84,9 @@ class Lox {
 
         Parser parser = new Parser(tokens);
         auto expression = parser.parse();
+        if(hadError) return;
+
+        resolver.resolve(expression);
         if(hadError) return;
 
         auto result = interpreter.interpret(expression);
