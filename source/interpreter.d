@@ -86,7 +86,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
     }
 
     void visit(Var stmt) {
-        Variant variant;
+        Variant variant = Variant(null);
         if (stmt.initializer !is null) {
             variant = evaluate(stmt.initializer);
         }

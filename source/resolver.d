@@ -4,12 +4,23 @@ import std.container;
 import std.range;
 import token;
 import app;
+import std.format;
+import std.typecons : Tuple;
 
 class Resolver : StmtVisitor, ExprVisitor {
+
+    private alias VarRef = Tuple!(VarState, "state", int, "line");
+
     private Interpreter interpreter;
-    private SList!(bool[string]) scopes;
+    private SList!(VarRef[string]) scopes;
     private FunctionType currentFunction = FunctionType.NONE;
     private LoopType currentLoop = LoopType.NONE;
+
+    private enum VarState {
+        DECLARED,
+        DEFINED,
+        REFERENCED
+    }
 
     private enum FunctionType {
         NONE,
@@ -23,7 +34,7 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     this(Interpreter interpreter) {
         this.interpreter = interpreter;
-        this.scopes = SList!(bool[string])();
+        this.scopes = SList!(VarRef[string])();
     }
 
     void resolve(T)(T[] statements...) {
@@ -37,23 +48,27 @@ class Resolver : StmtVisitor, ExprVisitor {
     }
 
     private void endScope() {
+        foreach(sco; scopes.front().byPair) {
+            if(sco.value.state != VarState.REFERENCED) {
+                Lox.error(sco.value.line, format("Variable '%s' declared but never referenced", sco.key));
+            }
+        }
         scopes.removeFront();
     }
 
     private void declare(TokenI name) {
         if(scopes.empty()) return;
 
-        auto sco = scopes.front();
-        if(name.lexeme in sco) {
+        if(name.lexeme in scopes.front()) {
             Lox.error(name, "Already a variable with this name in this scope.");
         }
-        sco[name.lexeme] = false;
+        scopes.front()[name.lexeme] = VarRef(VarState.DECLARED, name.line);
     }
 
     private void define(TokenI name) {
         if(scopes.empty()) return;
 
-        scopes.front()[name.lexeme] = true;
+        scopes.front()[name.lexeme].state = VarState.DEFINED;
     }
 
     private void resolveLocal(Expr expr, TokenI name) {
@@ -76,8 +91,8 @@ class Resolver : StmtVisitor, ExprVisitor {
         declare(stmt.name);
         if (stmt.initializer !is null) {
             resolve(stmt.initializer);
+            define(stmt.name);
         }
-        define(stmt.name);
     }
 
     void visit(Block stmt) {
@@ -135,15 +150,23 @@ class Resolver : StmtVisitor, ExprVisitor {
     }
 
     void visit(Variable expr) {
-        if (!scopes.empty() && !scopes.front().get(expr.name.lexeme, true)) {
-            Lox.error(expr.name, "Can't read local variable in its own initializer.");
+        if (!scopes.empty() &&
+                scopes.front().get(expr.name.lexeme, VarRef(VarState.DEFINED, 0)).state == VarState.DECLARED) {
+            Lox.error(expr.name, "Attempt to resolve undefined local variable.");
         }
 
         resolveLocal(expr, expr.name);
+
+        if(!scopes.empty() && expr.name.lexeme in scopes.front()) {
+            scopes.front()[expr.name.lexeme].state = VarState.REFERENCED;
+        }
     }
     void visit(Assign expr) {
         resolve(expr.value);
         resolveLocal(expr, expr.name);
+        if(!scopes.empty() && expr.name.lexeme in scopes.front()) {
+            scopes.front()[expr.name.lexeme].state = VarState.DEFINED;
+        }
     }
 
     void visit(Logical _logical) {
