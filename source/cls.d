@@ -6,11 +6,12 @@ import ast;
 import fun;
 import std.array;
 
-class Cls : Callable {
+class Cls : Instance, Callable {
     private Var[] props;
     private ulong _arity;
+    private Cls meta;
 
-    this(Var[] props) {
+    this(Var[] props, Var[] classprops = null, Interpreter interpreter = null) {
         this.props = props;
         _arity = 0;
         foreach(prop; props) {
@@ -20,30 +21,37 @@ class Cls : Callable {
                 }
             }
         }
+        if (classprops !is null) {
+            this.meta = new Cls(classprops);
+            super(meta.evalProps(interpreter));
+            super.construct([], interpreter);
+        } else {
+            this.meta = null;
+            super();
+        }
     }
 
     Variant call(Interpreter interpreter, Variant[] arguments) {
+        Variant[string] fields = evalProps(interpreter);
+        Instance instance = new Instance(fields);
+        instance.addFields(super.getFields());
+        instance.construct(arguments, interpreter);
+        return Variant(instance);
+    }
+
+    private Variant[string] evalProps(Interpreter interpreter) {
         Variant[string] fields = null;
         foreach(prop; props) {
             fields[prop.name.lexeme] = interpreter.evaluate(prop.initializer);
         }
-        Instance instance = new Instance(this, fields);
-        if (auto fun = "init" in fields) {
-            if (fun.convertsTo!(Fun)) {
-                auto ifun = fun.get!(Fun);
-                ifun.setInitializer();
-                ifun.bind(instance).call(interpreter, arguments);
-                *fun = Variant(ifun);
-            }
-        }
-        return Variant(instance);
+        return fields;
     }
 
     ulong arity() {
         return _arity;
     }
 
-    void toString(scope void delegate(const(char)[]) sink) const {
+    override void toString(scope void delegate(const(char)[]) sink) const {
         sink("<class>");
     }
 }

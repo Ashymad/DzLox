@@ -215,11 +215,16 @@ class Resolver : StmtVisitor, ExprVisitor {
         ClassType enclosingClass = currentClass;
         currentClass = ClassType.CLASS;
         beginScope();
-        foreach(method; cl.methods) {
+        foreach(i, method; chain(cl.methods, cl.classmethods).enumerate()) {
             if (auto fun = cast(Function) method.initializer) {
                 scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
-                FunctionType declaration = method.name.lexeme == "init" ? 
-                    FunctionType.INITIALIZER : FunctionType.METHOD;
+                FunctionType declaration = FunctionType.METHOD;
+                if (method.name.lexeme == "init") {
+                    declaration = FunctionType.INITIALIZER;
+                    if (i >= cl.methods.length && fun.params.length > 0) {
+                        Lox.error(fun.params[0], "class initializer cannot have arguments");
+                    }
+                }
                 resolveFunction(fun, declaration);
             } else {
                 resolve(method.initializer);

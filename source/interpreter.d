@@ -144,7 +144,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
     }
 
     void visit(Class expr) {
-        value = new Cls(expr.methods);
+        value = new Cls(expr.methods, expr.classmethods, this);
     }
 
     void visit(Get expr) {

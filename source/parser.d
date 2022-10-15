@@ -24,7 +24,7 @@ returnStmt     → "return" expression? ";" ;
 funDecl        → "fun" IDENTIFIER function ;
 function       → "(" parameters? ")" block ;
 classDecl      → "class" IDENTIFIER class ;
-class          → "{" ( IDENTIFIER ( function | "=" expression ) )* "}" ;
+class          → "{" ( "class"? IDENTIFIER ( function | "=" expression ) )* "}" ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
@@ -119,12 +119,16 @@ class Parser {
         consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
 
         Var[] fields;
-        while (!isAtEnd() && match(TokenType.IDENTIFIER)) {
+        Var[] classfields;
+
+        while (!isAtEnd() && !check(TokenType.RIGHT_BRACE)) {
+            Var[]* lfields = match(TokenType.CLASS) ? &classfields : &fields;
+            consume(TokenType.IDENTIFIER, "Expect field name.");
             TokenI name = previous();
             if (check(TokenType.LEFT_PAREN)) {
-              fields ~= statement!(Var)(name, fun());
+              *lfields ~= statement!(Var)(name, fun());
             } else if (match(TokenType.EQUAL)) {
-              fields ~= statement!(Var)(name, expression());
+              *lfields ~= statement!(Var)(name, expression());
             } else {
                 Lox.error(name, "Expect field declaration");
             }
@@ -132,7 +136,7 @@ class Parser {
 
         consume(TokenType.RIGHT_BRACE, "Expect '}' after class.");
 
-        return new Class(fields);
+        return new Class(fields, classfields);
     }
     
     private Stmt varDeclaration() {
