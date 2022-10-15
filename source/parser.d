@@ -1,13 +1,14 @@
 import token;
 import tokentype;
 import std.container;
-import std.variant;
+import std.variant : Variant;
 import ast;
 import app;
 
 /*
 program        → statement* EOF ;
-declaration    → funDecl
+declaration    → classDecl
+               | funDecl
                | varDecl
                | statement ;
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -22,6 +23,8 @@ statement      → exprStmt
 returnStmt     → "return" expression? ";" ;
 funDecl        → "fun" IDENTIFIER function ;
 function       → "(" parameters? ")" block ;
+classDecl      → "class" IDENTIFIER class ;
+class          → "{" ( IDENTIFIER ( function | "=" expression ) )* "}" ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
@@ -34,7 +37,7 @@ exprStmt       → expression ";" ;
 printStmt      → "print" expression ";" ;
 expression     → separator ;
 separator      → assignment ( "," assignment )* ;
-assignment     → IDENTIFIER "=" assignment
+assignment     → ( call "." )? IDENTIFIER "=" assignment
                | ternary ;
 ternary        → logic_or ( "?" expression ":" ternary )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
@@ -45,9 +48,10 @@ term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" ) unary )* ;
 unary          → ( "!" | "-" | "ast" ) unary
                | call ;
-call           → funExpr ( "(" arguments? ")" )* ;
-funExpr        → "fun" function ;
-primary        → NUMBER | STRING | "true" | "false" | "nil"
+call           → funExpr ( "(" arguments? ")" | "." IDENTIFIER )* ;
+funExpr        → "fun" function | classExpr ;
+classExpr      → "class" class | primary ;
+primary        → NUMBER | STRING | "true" | "false" | "nil" | "this"
                | "(" expression ")" | IDENTIFIER ;
 arguments      → expression ( "," expression )* ;
 */
@@ -81,6 +85,9 @@ class Parser {
             if (check(TokenType.FUN) && peekNext().type == TokenType.IDENTIFIER) {
                 advance();
                 return statement!(Var)(advance(), fun());
+            } else if (check(TokenType.CLASS) && peekNext().type == TokenType.IDENTIFIER) {
+                advance();
+                return statement!(Var)(advance(), _class());
             } else {
                 return matchStatement();
             }
@@ -106,6 +113,26 @@ class Parser {
         consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
         Stmt[] bod = block();
         return new Function(parameters, bod);
+    }
+
+    private Expr _class() {
+        consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
+
+        Var[] fields;
+        while (!isAtEnd() && match(TokenType.IDENTIFIER)) {
+            TokenI name = previous();
+            if (check(TokenType.LEFT_PAREN)) {
+              fields ~= statement!(Var)(name, fun());
+            } else if (match(TokenType.EQUAL)) {
+              fields ~= statement!(Var)(name, expression());
+            } else {
+                Lox.error(name, "Expect field declaration");
+            }
+        }
+
+        consume(TokenType.RIGHT_BRACE, "Expect '}' after class.");
+
+        return new Class(fields);
     }
     
     private Stmt varDeclaration() {
@@ -223,7 +250,7 @@ class Parser {
         return statements;
     }
 
-    private Stmt statement(T, A...)(A a) {
+    private T statement(T, A...)(A a) {
         if (!isAtEnd()
                 && !match(TokenType.SEMICOLON)
                 && !check(TokenType.RIGHT_BRACE)
@@ -249,6 +276,10 @@ class Parser {
 
             if (auto variable = cast(Variable) expr) {
                 return new Assign(variable.name, value);
+            }
+
+            if (auto variable = cast(Get) expr) {
+                return new Set(variable.object, variable.name, value);
             }
 
             error(equals, "Invalid assignment target.");
@@ -316,6 +347,10 @@ class Parser {
         while (true) { 
             if (match(TokenType.LEFT_PAREN)) {
                 expr = finishCall(expr);
+            } else if (match(TokenType.DOT)) {
+                TokenI name = consume(TokenType.IDENTIFIER,
+                    "Expect property name after '.'.");
+                expr = new Get(expr, name);
             } else {
                 break;
             }
@@ -327,6 +362,13 @@ class Parser {
     private Expr funExpr() {
         if (match(TokenType.FUN)) {
             return fun();
+        }
+        return classExpr();
+    }
+
+    private Expr classExpr() {
+        if (match(TokenType.CLASS)) {
+            return _class();
         }
         return primary();
     }
@@ -358,10 +400,10 @@ class Parser {
                 return new Literal(Variant(null));
             if (match(IDENTIFIER))
                 return new Variable(previous());
-
-            if (match(NUMBER, STRING)) {
+            if (match(NUMBER, STRING))
                 return new Literal(previous().literal);
-            }
+            if (match(THIS))
+                return new This(previous());
 
             if (match(LEFT_PAREN)) {
                 Expr expr = expression();

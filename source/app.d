@@ -108,15 +108,23 @@ class Lox {
         }
     }
 
+    static void warning(const TokenI token, string message) {
+        if (token.type == TokenType.EOF) {
+            report(token.line, " at end", message, true);
+        } else {
+            report(token.line, " at '" ~ token.lexeme ~ "'", message, true);
+        }
+    }
+
     static void error(RuntimeError err) {
         error(err.token, err.msg);
         hadRuntimeError = true;
     }
 
 
-    static void report(int line, string where, string msg) {
-        writefln("[line %s] Error%s: %s", line, where, msg);
-        hadError = true;
+    static void report(int line, string where, string msg, bool warning = false) {
+        writefln("[line %s] %s%s: %s", line, warning ? "Warning" : "Error", where, msg);
+        if (!warning) this.hadError = true;
     }
 }
 

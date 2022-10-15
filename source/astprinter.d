@@ -38,11 +38,23 @@ class AstPrinter : ExprVisitor {
     void visit(Function fun) {
         printed = "(fun (" ~ fun.params.map!(p => p.lexeme).join(" ") ~  ") {...})";
     }
+    void visit(Class cls) {
+        printed = "(class " ~ cls.methods.map!(p => p.name.lexeme ~ "()").join(" ") ~  ")";
+    }
     void visit(Unary unary) {
         printed = parenthesize(unary.operator.lexeme, unary.right);
     }
     void visit(Call call) {
         printed = parenthesize("call", call.callee ~ call.arguments);
+    }
+    void visit(Get get) {
+        printed = parenthesize("get", get.object, new Variable(get.name));
+    }
+    void visit(Set get) {
+        printed = parenthesize("set", get.object, new Variable(get.name), get.value);
+    }
+    void visit(This th) {
+        printed = th.keyword.lexeme;
     }
     private string parenthesize(string name, Expr[] exprs ...) {
         return "(" ~ name ~ " " ~ exprs.map!(e => print(e)).join(" ") ~  ")";

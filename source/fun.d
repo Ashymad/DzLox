@@ -3,14 +3,23 @@ import ast;
 import interpreter;
 import environment;
 import std.variant;
+import instance;
+import tokentype;
+import token;
 
 class Fun : Callable {
     private Function fun;
     private Environment closure;
+    private bool isInitializer;
 
-    this(Function fun, Environment closure) {
+    this(Function fun, Environment closure, bool isInitializer = false) {
         this.closure = closure;
         this.fun = fun;
+        this.isInitializer = isInitializer;
+    }
+
+    void setInitializer() {
+        isInitializer = true;
     }
 
     Variant call(Interpreter interpreter, Variant[] arguments) {
@@ -22,9 +31,22 @@ class Fun : Callable {
         try {
             interpreter.executeBlock(fun.body, environment);
         } catch (Interpreter.ReturnCalled ret) {
-            return ret.value;
+            return retv(ret.value);
         }
-        return Variant(null);
+
+        return retv(Variant(null));
+    }
+
+    Variant retv(Variant value) {
+        if (isInitializer) return Variant(new Instance(closure.getAt(
+                TokenI(TokenType.THIS, "this", null, -1), 0).get!(Instance)));
+        return value;
+    }
+
+    Fun bind(Instance instance) {
+        Environment environment = new Environment(closure);
+        environment.define("this", Variant(instance));
+        return new Fun(fun, environment, isInitializer);
     }
 
     ulong arity() {

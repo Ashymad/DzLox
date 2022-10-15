@@ -6,6 +6,7 @@ import token;
 import app;
 import std.format;
 import std.typecons : Tuple;
+import tokentype;
 
 class Resolver : StmtVisitor, ExprVisitor {
 
@@ -15,6 +16,7 @@ class Resolver : StmtVisitor, ExprVisitor {
     private SList!(VarRef[string]) scopes;
     private FunctionType currentFunction = FunctionType.NONE;
     private LoopType currentLoop = LoopType.NONE;
+    private ClassType currentClass = ClassType.NONE;
 
     private enum VarState {
         DECLARED,
@@ -24,12 +26,19 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     private enum FunctionType {
         NONE,
-        FUN
+        FUN,
+        METHOD,
+        INITIALIZER
     }
 
     private enum LoopType {
         NONE,
         WHILE
+    }
+
+    private enum ClassType {
+        NONE,
+        CLASS
     }
 
     this(Interpreter interpreter) {
@@ -50,10 +59,15 @@ class Resolver : StmtVisitor, ExprVisitor {
     private void endScope() {
         foreach(sco; scopes.front().byPair) {
             if(sco.value.state != VarState.REFERENCED) {
-                Lox.error(sco.value.line, format("Variable '%s' declared but never referenced", sco.key));
+                Lox.warning(mkToken(sco.key, sco.value),
+                    format("Variable declared but never referenced"));
             }
         }
         scopes.removeFront();
+    }
+
+    private TokenI mkToken(string name, VarRef vref) {
+        return TokenI(TokenType.IDENTIFIER, name, null, vref.line);
     }
 
     private void declare(TokenI name) {
@@ -73,8 +87,12 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     private void resolveLocal(Expr expr, TokenI name) {
         foreach(i, sco; scopes[].enumerate()) {
-            if(name.lexeme in sco) {
+            if(auto local = name.lexeme in sco) {
+                if ((*local).state == VarState.DECLARED) {
+                    Lox.error(name, "Attempt to reference undefined local variable");
+                }
                 interpreter.resolve(expr, i);
+                (*local).state = VarState.REFERENCED;
             }
         }
     }
@@ -126,6 +144,9 @@ class Resolver : StmtVisitor, ExprVisitor {
             Lox.error(_return.keyword, "Can't return from top-level code.");
         }
         if (_return.value !is null) resolve(_return.value);
+        else if (currentFunction == FunctionType.INITIALIZER) {
+            Lox.error(_return.keyword,  "Can't return value from initializer method");
+        }
     }
 
     void visit(Ternary _ternary) {
@@ -150,16 +171,7 @@ class Resolver : StmtVisitor, ExprVisitor {
     }
 
     void visit(Variable expr) {
-        if (!scopes.empty() &&
-                scopes.front().get(expr.name.lexeme, VarRef(VarState.DEFINED, 0)).state == VarState.DECLARED) {
-            Lox.error(expr.name, "Attempt to resolve undefined local variable.");
-        }
-
         resolveLocal(expr, expr.name);
-
-        if(!scopes.empty() && expr.name.lexeme in scopes.front()) {
-            scopes.front()[expr.name.lexeme].state = VarState.REFERENCED;
-        }
     }
     void visit(Assign expr) {
         resolve(expr.value);
@@ -183,8 +195,12 @@ class Resolver : StmtVisitor, ExprVisitor {
     }
 
     void visit(Function expr) {
+        resolveFunction(expr, FunctionType.FUN);
+    }
+
+    private void resolveFunction(Function expr, FunctionType type) {
         FunctionType enclosingFunction = currentFunction;
-        currentFunction = FunctionType.FUN;
+        currentFunction = type;
         beginScope();
         foreach (param; expr.params) {
             declare(param);
@@ -193,5 +209,42 @@ class Resolver : StmtVisitor, ExprVisitor {
         resolve(expr.body);
         endScope();
         currentFunction = enclosingFunction;
+    }
+
+    void visit(Class cl) {
+        ClassType enclosingClass = currentClass;
+        currentClass = ClassType.CLASS;
+        beginScope();
+        foreach(method; cl.methods) {
+            if (auto fun = cast(Function) method.initializer) {
+                scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
+                FunctionType declaration = method.name.lexeme == "init" ? 
+                    FunctionType.INITIALIZER : FunctionType.METHOD;
+                resolveFunction(fun, declaration);
+            } else {
+                resolve(method.initializer);
+            }
+        }
+        endScope();
+        currentClass = enclosingClass;
+    }
+
+    void visit(Get get) {
+        resolve(get.object);
+    }
+
+    void visit(Set set) {
+        resolve(set.value);
+        resolve(set.object);
+    }
+
+    void visit(This th) {
+        if (currentClass == ClassType.NONE
+                || currentFunction == FunctionType.FUN
+                || currentFunction == FunctionType.NONE) {
+            Lox.error(th.keyword, format("'This' used in invalid function type: %s", currentFunction));
+            return;
+        }
+        resolveLocal(th, th.keyword);
     }
 }

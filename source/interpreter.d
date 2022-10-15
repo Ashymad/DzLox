@@ -1,4 +1,4 @@
-import std.variant;
+import std.variant : Variant;
 import std.format;
 import std.algorithm;
 import std.stdio;
@@ -13,6 +13,8 @@ import astprinter;
 import environment;
 import callable;
 import fun;
+import cls;
+import instance;
 
 class Interpreter : StmtVisitor, ExprVisitor {
     private Variant value;
@@ -139,6 +141,34 @@ class Interpreter : StmtVisitor, ExprVisitor {
 
     void visit(Function expr) {
         value = new Fun(expr, environment);
+    }
+
+    void visit(Class expr) {
+        value = new Cls(expr.methods);
+    }
+
+    void visit(Get expr) {
+        Variant object = evaluate(expr.object);
+        if (!object.convertsTo!(Instance)) {
+            throw new RuntimeError(expr.name,
+                    "Attempt to acces property of non-instace object");
+        }
+        value = object.get!(Instance).get(expr.name);
+    }
+
+    void visit(Set expr) {
+        Variant object = evaluate(expr.object);
+        if (!object.convertsTo!(Instance)) {
+            throw new RuntimeError(expr.name,
+                    "Attempt to set property of non-instace object");
+        }
+        Variant val = evaluate(expr.value);
+        object.get!(Instance).set(expr.name, val);
+        value = val;
+    }
+
+    void visit(This expr) {
+        value = lookUpVariable(expr.keyword, expr);
     }
 
     void visit(Call expr) {
@@ -301,7 +331,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
         }
     }
 
-    private Variant evaluate(Expr expr) {
+    Variant evaluate(Expr expr) {
         expr.accept(this);
         return value;
     }

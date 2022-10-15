@@ -10,7 +10,7 @@ class Scanner {
     private string source;
     private int start = 0;
     private int current = 0;
-    private int line = 0;
+    private int line = 1;
 
     private Array!TokenI tokens;
 
