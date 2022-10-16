@@ -13,10 +13,11 @@ static immutable string[][] expressions = [
         ["Logical", "Expr left", "TokenI operator", "Expr right"],
         ["Call", "Expr callee", "TokenI paren", "Expr[] arguments"],
         ["Function", "TokenI[] params", "Stmt[] body"],
-        ["Class", "Var[] methods", "Var[] classmethods"],
+        ["Class", "Var[] methods", "Var[] classmethods", "Variable superclass"],
         ["Get", "Expr object", "TokenI name"],
         ["Set", "Expr object", "TokenI name", "Expr value"],
         ["This", "TokenI keyword"],
+        ["Super", "TokenI keyword"],
 ];
 
 static immutable string[][] statements = [

@@ -38,14 +38,14 @@ class Fun : Callable {
     }
 
     Variant retv(Variant value) {
-        if (isInitializer) return Variant(new Instance(closure.getAt(
-                TokenI(TokenType.THIS, "this", null, -1), 0).get!(Instance)));
+        if (isInitializer) return Variant(new Instance(closure.get(
+                TokenI(TokenType.THIS, "this", null, -1)).get!(Instance)));
         return value;
     }
 
-    Fun bind(Instance instance) {
+    Fun bind(string name, Instance instance) {
         Environment environment = new Environment(closure);
-        environment.define("this", Variant(instance));
+        environment.define(name, Variant(instance));
         return new Fun(fun, environment, isInitializer);
     }
 

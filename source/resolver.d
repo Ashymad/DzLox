@@ -38,7 +38,8 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     private enum ClassType {
         NONE,
-        CLASS
+        CLASS,
+        SUBCLASS
     }
 
     this(Interpreter interpreter) {
@@ -214,10 +215,20 @@ class Resolver : StmtVisitor, ExprVisitor {
     void visit(Class cl) {
         ClassType enclosingClass = currentClass;
         currentClass = ClassType.CLASS;
+        
+        if(cl.superclass) {
+            resolve(cl.superclass);
+            currentClass = ClassType.SUBCLASS;
+        }
+
+        if(cl.superclass) {
+            beginScope();
+            scopes.front()["super"] = VarRef(VarState.REFERENCED, 0);
+        }
         beginScope();
+        scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
         foreach(i, method; chain(cl.methods, cl.classmethods).enumerate()) {
             if (auto fun = cast(Function) method.initializer) {
-                scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
                 FunctionType declaration = FunctionType.METHOD;
                 if (method.name.lexeme == "init") {
                     declaration = FunctionType.INITIALIZER;
@@ -231,6 +242,7 @@ class Resolver : StmtVisitor, ExprVisitor {
             }
         }
         endScope();
+        if(cl.superclass) endScope();
         currentClass = enclosingClass;
     }
 
@@ -247,7 +259,17 @@ class Resolver : StmtVisitor, ExprVisitor {
         if (currentClass == ClassType.NONE
                 || currentFunction == FunctionType.FUN
                 || currentFunction == FunctionType.NONE) {
-            Lox.error(th.keyword, format("'This' used in invalid function type: %s", currentFunction));
+            Lox.error(th.keyword, "'This' not allowed here");
+            return;
+        }
+        resolveLocal(th, th.keyword);
+    }
+
+    void visit(Super th) {
+        if (currentClass != ClassType.SUBCLASS
+                || currentFunction == FunctionType.FUN
+                || currentFunction == FunctionType.NONE) {
+            Lox.error(th.keyword, "'Super' not allowed here");
             return;
         }
         resolveLocal(th, th.keyword);

@@ -144,7 +144,16 @@ class Interpreter : StmtVisitor, ExprVisitor {
     }
 
     void visit(Class expr) {
-        value = new Cls(expr.methods, expr.classmethods, this);
+        Cls superclass = null;
+        if (expr.superclass) {
+            auto var = evaluate(expr.superclass);
+            if (var.convertsTo!(Cls))
+                superclass = var.get!(Cls);
+            else
+                throw new RuntimeError(expr.superclass.name,
+                        "Attempt to subclass non-class");
+        }
+        value = new Cls(expr.methods, expr.classmethods, this, superclass);
     }
 
     void visit(Get expr) {
@@ -168,6 +177,10 @@ class Interpreter : StmtVisitor, ExprVisitor {
     }
 
     void visit(This expr) {
+        value = lookUpVariable(expr.keyword, expr);
+    }
+
+    void visit(Super expr) {
         value = lookUpVariable(expr.keyword, expr);
     }
 

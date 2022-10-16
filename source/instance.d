@@ -5,6 +5,7 @@ import fun;
 import interpreter;
 import std.range;
 import std.algorithm;
+import std.stdio;
 
 class Instance {
     private Variant[string] fields;
@@ -13,13 +14,10 @@ class Instance {
     this(Variant[string] fields = null) {
         this.fields = fields;
         this.constructor = null;
-        if (this.fields) bindMethods();
     }
 
     this(Instance inst) {
-        this.fields = inst.fields.dup;
-        this.constructor = null;
-        if (this.fields) bindMethods();
+        this(inst.fields.dup);
     }
 
     Variant get(TokenI name) {
@@ -44,14 +42,23 @@ class Instance {
         }
     }
 
+    void updateFields(Variant[string] newf) {
+        writeln("ASD");
+        foreach(name, value; newf.byPair) {
+            fields[name] = value;
+            writeln(name);
+        }
+    }
+
     Variant[string] getFields() {
         return fields;
     }
 
-    private void bindMethods() {
+    void bindMethods(string token, Instance instance = null) {
         foreach(name, field; fields.byPair) {
             if (field.convertsTo!(Fun)) {
-                auto ifun = field.get!(Fun).bind(this);
+                auto ifun = field.get!(Fun).bind(token,
+                        instance ? instance : this);
                 if (name == "init") {
                     ifun.setInitializer();
                     constructor = ifun;

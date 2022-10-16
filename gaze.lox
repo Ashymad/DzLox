@@ -1,0 +1,28 @@
+class A {
+  method() {
+    print "A method";
+  }
+}
+
+class B < A {
+  method() {
+    print "B method";
+  }
+
+  test() {
+    print "B";
+    super.method();
+    this.ola()
+  }
+}
+
+class C < B {
+}
+
+class D < C {
+    ola() {
+        print "OLA!";
+    }
+}
+
+D().test();

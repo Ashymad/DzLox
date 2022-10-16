@@ -5,14 +5,17 @@ import instance;
 import ast;
 import fun;
 import std.array;
+import std.range;
 
 class Cls : Instance, Callable {
     private Var[] props;
     private ulong _arity;
-    private Cls meta;
+    private Cls metaclass;
+    private Cls superclass;
 
-    this(Var[] props, Var[] classprops = null, Interpreter interpreter = null) {
+    this(Var[] props, Var[] classprops = null, Interpreter interpreter = null, Cls superclass = null) {
         this.props = props;
+        this.superclass = superclass;
         _arity = 0;
         foreach(prop; props) {
             if (prop.name.lexeme == "init") {
@@ -22,25 +25,37 @@ class Cls : Instance, Callable {
             }
         }
         if (classprops !is null) {
-            this.meta = new Cls(classprops);
-            super(meta.evalProps(interpreter));
+            metaclass = new Cls(classprops);
+            super(metaclass.evalProps(interpreter));
+            super.bindMethods("this");
             super.construct([], interpreter);
         } else {
-            this.meta = null;
+            metaclass = null;
             super();
         }
     }
 
+    Instance instatiate(Interpreter interpreter) {
+        Instance[] instances = [new Instance(evalProps(interpreter))];
+        for(Cls cls = this; cls.superclass; cls = cls.superclass) {
+            instances ~= new Instance(cls.superclass.evalProps(interpreter));
+        }
+        foreach_reverse(i, instance; instances[0..$-1].enumerate()) {
+            instance.bindMethods("super", instances[i+1]);
+            instance.addFields(instances[i+1].getFields());
+        }
+        return instances[0];
+    }
+
     Variant call(Interpreter interpreter, Variant[] arguments) {
-        Variant[string] fields = evalProps(interpreter);
-        Instance instance = new Instance(fields);
+        Instance instance = instatiate(interpreter);
+        instance.bindMethods("this");
         instance.addFields(super.getFields());
         instance.construct(arguments, interpreter);
         return Variant(instance);
     }
 
-    private Variant[string] evalProps(Interpreter interpreter) {
-        Variant[string] fields = null;
+    private Variant[string] evalProps(Interpreter interpreter, Variant[string] fields = null) {
         foreach(prop; props) {
             fields[prop.name.lexeme] = interpreter.evaluate(prop.initializer);
         }

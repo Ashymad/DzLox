@@ -56,6 +56,9 @@ class AstPrinter : ExprVisitor {
     void visit(This th) {
         printed = th.keyword.lexeme;
     }
+    void visit(Super th) {
+        printed = th.keyword.lexeme;
+    }
     private string parenthesize(string name, Expr[] exprs ...) {
         return "(" ~ name ~ " " ~ exprs.map!(e => print(e)).join(" ") ~  ")";
     }

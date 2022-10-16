@@ -24,7 +24,7 @@ returnStmt     → "return" expression? ";" ;
 funDecl        → "fun" IDENTIFIER function ;
 function       → "(" parameters? ")" block ;
 classDecl      → "class" IDENTIFIER class ;
-class          → "{" ( "class"? IDENTIFIER ( function | "=" expression ) )* "}" ;
+class          → ( "<" IDENTIFIER )? "{" ( "class"? IDENTIFIER ( function | "=" expression ) )* "}" ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
@@ -51,7 +51,7 @@ unary          → ( "!" | "-" | "ast" ) unary
 call           → funExpr ( "(" arguments? ")" | "." IDENTIFIER )* ;
 funExpr        → "fun" function | classExpr ;
 classExpr      → "class" class | primary ;
-primary        → NUMBER | STRING | "true" | "false" | "nil" | "this"
+primary        → NUMBER | STRING | "true" | "false" | "nil" | "this" | "super"
                | "(" expression ")" | IDENTIFIER ;
 arguments      → expression ( "," expression )* ;
 */
@@ -116,6 +116,12 @@ class Parser {
     }
 
     private Expr _class() {
+        Variable superclass = null;
+        if (match(TokenType.LESS)) {
+            consume(TokenType.IDENTIFIER, "Expect superclass name.");
+            superclass = new Variable(previous());
+        }
+
         consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
 
         Var[] fields;
@@ -136,7 +142,7 @@ class Parser {
 
         consume(TokenType.RIGHT_BRACE, "Expect '}' after class.");
 
-        return new Class(fields, classfields);
+        return new Class(fields, classfields, superclass);
     }
     
     private Stmt varDeclaration() {
@@ -408,6 +414,8 @@ class Parser {
                 return new Literal(previous().literal);
             if (match(THIS))
                 return new This(previous());
+            if (match(SUPER))
+                return new Super(previous());
 
             if (match(LEFT_PAREN)) {
                 Expr expr = expression();
