@@ -6,6 +6,7 @@ pub fn main() anyerror!u8 {
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(!allocator.deinit());
     var ch = try chunk.Chunk.init(allocator.allocator());
+    defer ch.deinit();
 
     const constant = try ch.addConstant(1.2);
     try ch.write(@enumToInt(chunk.OP.CONSTANT), 123);
@@ -13,7 +14,6 @@ pub fn main() anyerror!u8 {
 
     try ch.write(@enumToInt(chunk.OP.RETURN), 123);
 
-    debug.disassembleChunk(ch, "test chunk");
-    ch.deinit();
+    try debug.disassembleChunk(ch, "test chunk");
     return 0;
 }
