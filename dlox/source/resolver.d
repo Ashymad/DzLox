@@ -14,9 +14,11 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     private Interpreter interpreter;
     private SList!(VarRef[string]) scopes;
+    private SList!(BlockType) blocks;
     private FunctionType currentFunction = FunctionType.NONE;
     private LoopType currentLoop = LoopType.NONE;
     private ClassType currentClass = ClassType.NONE;
+    private BlockType currentBlock = BlockType.EXEC;
 
     private enum VarState {
         DECLARED,
@@ -39,12 +41,19 @@ class Resolver : StmtVisitor, ExprVisitor {
     private enum ClassType {
         NONE,
         CLASS,
+        METACLASS,
         SUBCLASS
+    }
+
+    private enum BlockType {
+        EXEC,
+        CALL
     }
 
     this(Interpreter interpreter) {
         this.interpreter = interpreter;
         this.scopes = SList!(VarRef[string])();
+        this.blocks = SList!(BlockType)();
     }
 
     void resolve(T)(T[] statements...) {
@@ -53,8 +62,9 @@ class Resolver : StmtVisitor, ExprVisitor {
         }
     }
 
-    void beginScope() {
+    void beginScope(BlockType type = BlockType.EXEC) {
         scopes.insertFront(null);
+        blocks.insertFront(type);
     }
 
     private void endScope() {
@@ -65,6 +75,7 @@ class Resolver : StmtVisitor, ExprVisitor {
             }
         }
         scopes.removeFront();
+        blocks.removeFront();
     }
 
     private TokenI mkToken(string name, VarRef vref) {
@@ -86,14 +97,24 @@ class Resolver : StmtVisitor, ExprVisitor {
         scopes.front()[name.lexeme].state = VarState.DEFINED;
     }
 
-    private void resolveLocal(Expr expr, TokenI name) {
+    private void resolveLocal(Expr expr, TokenI name, bool lvalue = false) {
         foreach(i, sco; scopes[].enumerate()) {
             if(auto local = name.lexeme in sco) {
-                if ((*local).state == VarState.DECLARED) {
-                    Lox.error(name, "Attempt to reference undefined local variable");
+                if (!lvalue && (*local).state == VarState.DECLARED) {
+                    bool call = false;
+                    foreach(bl; blocks[].take(i)) {
+                        if (bl == BlockType.CALL) {
+                            call = true;
+                            break;
+                        }
+                    }
+                    if (!call) Lox.error(name, "Attempt to reference undefined local variable");
                 }
                 interpreter.resolve(expr, i);
-                (*local).state = VarState.REFERENCED;
+                if ((*local).state != VarState.REFERENCED) {
+                    (*local).state = lvalue ? VarState.DEFINED : VarState.REFERENCED;
+                }
+                break;
             }
         }
     }
@@ -144,9 +165,11 @@ class Resolver : StmtVisitor, ExprVisitor {
         if (currentFunction == FunctionType.NONE) {
             Lox.error(_return.keyword, "Can't return from top-level code.");
         }
-        if (_return.value !is null) resolve(_return.value);
-        else if (currentFunction == FunctionType.INITIALIZER) {
-            Lox.error(_return.keyword,  "Can't return value from initializer method");
+        if (_return.value !is null) {
+            if (currentFunction == FunctionType.INITIALIZER) {
+                Lox.error(_return.keyword,  "Can't return value from initializer method");
+            }
+            resolve(_return.value);
         }
     }
 
@@ -176,10 +199,7 @@ class Resolver : StmtVisitor, ExprVisitor {
     }
     void visit(Assign expr) {
         resolve(expr.value);
-        resolveLocal(expr, expr.name);
-        if(!scopes.empty() && expr.name.lexeme in scopes.front()) {
-            scopes.front()[expr.name.lexeme].state = VarState.DEFINED;
-        }
+        resolveLocal(expr, expr.name, true);
     }
 
     void visit(Logical _logical) {
@@ -202,7 +222,7 @@ class Resolver : StmtVisitor, ExprVisitor {
     private void resolveFunction(Function expr, FunctionType type) {
         FunctionType enclosingFunction = currentFunction;
         currentFunction = type;
-        beginScope();
+        beginScope(BlockType.CALL);
         foreach (param; expr.params) {
             declare(param);
             define(param);
@@ -214,25 +234,42 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     void visit(Class cl) {
         ClassType enclosingClass = currentClass;
+        currentClass = ClassType.METACLASS;
+
+        beginScope();
+        scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
+
+        resolveMethods(cl.classmethods);
+
+        endScope();
+
         currentClass = ClassType.CLASS;
         
         if(cl.superclass) {
             resolve(cl.superclass);
             currentClass = ClassType.SUBCLASS;
-        }
-
-        if(cl.superclass) {
             beginScope();
             scopes.front()["super"] = VarRef(VarState.REFERENCED, 0);
         }
-        beginScope();
+
+        beginScope(BlockType.CALL);
         scopes.front()["this"] = VarRef(VarState.REFERENCED, 0);
-        foreach(i, method; chain(cl.methods, cl.classmethods).enumerate()) {
+
+        resolveMethods(cl.methods);
+
+        endScope();
+        
+        if(cl.superclass) endScope();
+        currentClass = enclosingClass;
+    }
+
+    void resolveMethods(Var[] methods) {
+        foreach(method; methods) {
             if (auto fun = cast(Function) method.initializer) {
                 FunctionType declaration = FunctionType.METHOD;
                 if (method.name.lexeme == "init") {
                     declaration = FunctionType.INITIALIZER;
-                    if (i >= cl.methods.length && fun.params.length > 0) {
+                    if (currentClass == ClassType.METACLASS && fun.params.length > 0) {
                         Lox.error(fun.params[0], "class initializer cannot have arguments");
                     }
                 }
@@ -241,9 +278,7 @@ class Resolver : StmtVisitor, ExprVisitor {
                 resolve(method.initializer);
             }
         }
-        endScope();
-        if(cl.superclass) endScope();
-        currentClass = enclosingClass;
+
     }
 
     void visit(Get get) {
@@ -257,7 +292,6 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     void visit(This th) {
         if (currentClass == ClassType.NONE
-                || currentFunction == FunctionType.FUN
                 || currentFunction == FunctionType.NONE) {
             Lox.error(th.keyword, "'This' not allowed here");
             return;
@@ -267,7 +301,6 @@ class Resolver : StmtVisitor, ExprVisitor {
 
     void visit(Super th) {
         if (currentClass != ClassType.SUBCLASS
-                || currentFunction == FunctionType.FUN
                 || currentFunction == FunctionType.NONE) {
             Lox.error(th.keyword, "'Super' not allowed here");
             return;

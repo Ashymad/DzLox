@@ -40,16 +40,19 @@ class Cls : Instance, Callable {
         for(Cls cls = this; cls.superclass; cls = cls.superclass) {
             instances ~= new Instance(cls.superclass.evalProps(interpreter));
         }
-        foreach_reverse(i, instance; instances[0..$-1].enumerate()) {
-            instance.bindMethods("super", instances[i+1]);
-            instance.addFields(instances[i+1].getFields());
+        instances[$-1].bindMethods("this", instances[0]);
+        if (instances.length > 1) {
+            foreach_reverse(ins; instances.slide(2)) {
+                ins[0].bindMethods("super", ins[1]);
+                ins[0].bindMethods("this", instances[0]);
+                ins[0].addFields(ins[1].getFields());
+            }
         }
         return instances[0];
     }
 
     Variant call(Interpreter interpreter, Variant[] arguments) {
         Instance instance = instatiate(interpreter);
-        instance.bindMethods("this");
         instance.addFields(super.getFields());
         instance.construct(arguments, interpreter);
         return Variant(instance);

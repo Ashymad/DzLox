@@ -1,5 +1,7 @@
 import std.variant;
+import core.exception;
 import token;
+import std.stdio;
 import error;
 
 class Environment {
@@ -46,7 +48,12 @@ class Environment {
     }
     
     Variant getAt(TokenI name, size_t distance) {
-        return ancestor(distance).values[name.lexeme];
+        try {
+            return ancestor(distance).values[name.lexeme];
+        } catch (RangeError err) {
+            stderr.writefln("Resolved variable %s not at distance %s!", name.lexeme, distance);
+            throw err;
+        }
     }
 
     void assignAt(TokenI name, Variant value, size_t distance) {

@@ -43,10 +43,8 @@ class Instance {
     }
 
     void updateFields(Variant[string] newf) {
-        writeln("ASD");
         foreach(name, value; newf.byPair) {
             fields[name] = value;
-            writeln(name);
         }
     }
 

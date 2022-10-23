@@ -340,7 +340,7 @@ class Parser {
     private Expr unary() {
         with (TokenType) if (match(BANG, MINUS, AST)) {
             TokenI operator = previous();
-            Expr right = primary();
+            Expr right = unary();
             if (operator.type == AST) {
                 if(Grouping gr = cast(Grouping)right) {
                     right = gr.expression;

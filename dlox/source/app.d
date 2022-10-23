@@ -123,7 +123,7 @@ class Lox {
 
 
     static void report(int line, string where, string msg, bool warning = false) {
-        writefln("[line %s] %s%s: %s", line, warning ? "Warning" : "Error", where, msg);
+        stderr.writefln("[line %s] %s%s: %s", line, warning ? "Warning" : "Error", where, msg);
         if (!warning) this.hadError = true;
     }
 }

@@ -40,6 +40,7 @@ class Interpreter : StmtVisitor, ExprVisitor {
         globals = new Environment();
         environment = globals;
         locals = null;
+        value = Variant(null);
         
         globals.define("clock", Variant(new class Callable {
                     ulong arity() {
@@ -280,10 +281,10 @@ class Interpreter : StmtVisitor, ExprVisitor {
                 value = left.get!(double) <= right.get!(double);
                 break;
             case EQUAL_EQUAL:
-                value = left == right;
+                value = left.type() == right.type() && left == right;
                 break;
             case BANG_EQUAL:
-                value = left != right;
+                value = left.type() != right.type() || left != right;
                 break;
             case COMMA:
                 value = right;
