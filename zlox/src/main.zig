@@ -5,7 +5,7 @@ const vm = @import("vm.zig");
 
 pub fn main() anyerror!u8 {
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(!allocator.deinit());
+    defer std.debug.assert(allocator.deinit() == std.heap.Check.ok);
     var ch = try chunk.Chunk.init(allocator.allocator());
     defer ch.deinit();
     var VM = vm.VM.init();
