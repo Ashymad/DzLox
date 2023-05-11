@@ -2,43 +2,40 @@ const std = @import("std");
 
 pub fn Array(comptime T: type, comptime S: type, comptime size: S) type {
     return struct {
-        count: S,
-        capacity: S,
-        elements: []T,
+        len: S,
+        data: []T,
         allocator: std.mem.Allocator,
 
         pub fn init(allocator: std.mem.Allocator) !@This() {
             return @This() {
-                .count = 0,
-                .capacity = size,
-                .elements = try allocator.alloc(T, size),
+                .len = 0,
+                .data = try allocator.alloc(T, size),
                 .allocator = allocator
             };
         }
 
         pub fn add(self: *@This(), val: T) !void {
-            if (self.capacity < self.count + 1) {
-                self.capacity = 2 * self.count;
-                self.elements = try self.allocator.realloc(self.elements, self.capacity);
+            if (self.data.len <= self.len) {
+                self.data = try self.allocator.realloc(self.data, 2 * self.data.len);
             }
-            self.elements[self.count] = val;
-            self.count += 1;
+            self.data[self.len] = val;
+            self.len += 1;
         }
 
         pub fn get(self: *const @This(), idx: S) !T {
-            if (idx >= self.count) 
+            if (idx >= self.len) 
                 return error.IndexOutOfBounds;
-            return self.elements[idx];
+            return self.data[idx];
         }
 
         pub fn last(self: *const @This()) !T {
-            if (self.count == 0)
+            if (self.len == 0)
                 return error.IndexOutOfBounds;
-            return self.get(self.count - 1);
+            return self.data[self.len - 1];
         }
 
         pub fn deinit(self: *@This()) void {
-            self.allocator.free(self.elements);
+            self.allocator.free(self.data);
         }
     };
 }
@@ -61,7 +58,7 @@ pub fn RLEArray(comptime T: type, comptime size: usize) type {
                 return;
             };
             if (val == last.val) {
-                self.array.elements[self.array.count-1].run += 1;
+                self.array.data[self.array.len-1].run += 1;
             } else {
                 try self.array.add(.{.val = val, .run = 1});
             }
@@ -73,7 +70,7 @@ pub fn RLEArray(comptime T: type, comptime size: usize) type {
             while(idx >= sum) : (i += 1) {
                 sum += (try self.array.get(i)).run;
             }
-            if (i > 0) return self.array.elements[i-1].val
+            if (i > 0) return self.array.data[i-1].val
             else return (try self.array.get(i)).val;
         }
 
