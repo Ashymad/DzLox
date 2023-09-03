@@ -27,6 +27,11 @@ pub const Chunk = struct {
         try self.lines.add(line);
     }
 
+    pub fn writeOP(self: *@This(), op: OP, line: u32) !void {
+        try self.code.add(@intFromEnum(op));
+        try self.lines.add(line);
+    }
+
     pub fn addConstant(self: *@This(), val: value.Value) !u8 {
         try self.constants.add(val);
         return self.constants.len - 1;

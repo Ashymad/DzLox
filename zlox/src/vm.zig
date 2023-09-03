@@ -4,8 +4,9 @@ const value = @import("value.zig");
 const std = @import("std");
 const debug = @import("debug.zig");
 const wrp = @import("wrap.zig");
+const compiler = @import("compiler.zig");
 
-pub const InterpreterError = error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     ip: [*]const u8,
@@ -27,11 +28,16 @@ pub const VM = struct {
         return ret;
     }
 
-    pub fn interpret(self: *@This(), chunk: *const Chunk) InterpreterError!void {
+    pub fn interpretChunk(self: *@This(), chunk: *const Chunk) InterpreterError!void {
         self.resetStack();
         self.chunk = chunk;
         self.ip = chunk.code.data.ptr;
         try self.run(true);
+    }
+
+    pub fn interpret(self: *@This(), source: []const u8) InterpreterError!void {
+        try compiler.compile(source);
+        self.resetStack();
     }
 
     fn resetStack(self: *@This()) void {
@@ -76,23 +82,23 @@ pub const VM = struct {
                 }
                 std.debug.print("\n", .{});
             }
-            _ = try debug.disassembleInstruction(self.chunk.*, @ptrToInt(self.ip) - @ptrToInt(self.chunk.code.data.ptr));
+            _ = try debug.disassembleInstruction(self.chunk.*, @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr));
             const instruction: u8 = self.read_byte();
             switch (instruction) {
-                @enumToInt(OP.RETURN) => {
+                @intFromEnum(OP.RETURN) => {
                     value.printValue(self.pop());
                     std.debug.print("\n", .{});
                     return;
                 },
-                @enumToInt(OP.CONSTANT) => {
+                @intFromEnum(OP.CONSTANT) => {
                     const constant = self.read_constant();
                     self.push(constant);
                 },
-                @enumToInt(OP.NEGATE) => self.push(-self.pop()),
-                @enumToInt(OP.ADD) => self.binary_op(wrp.add),
-                @enumToInt(OP.SUBTRACT) => self.binary_op(wrp.sub),
-                @enumToInt(OP.MULTIPLY) => self.binary_op(wrp.mul),
-                @enumToInt(OP.DIVIDE) => self.binary_op(wrp.div),
+                @intFromEnum(OP.NEGATE) => self.push(-self.pop()),
+                @intFromEnum(OP.ADD) => self.binary_op(wrp.add),
+                @intFromEnum(OP.SUBTRACT) => self.binary_op(wrp.sub),
+                @intFromEnum(OP.MULTIPLY) => self.binary_op(wrp.mul),
+                @intFromEnum(OP.DIVIDE) => self.binary_op(wrp.div),
                 else => return InterpreterError.CompileError,
             }
         }

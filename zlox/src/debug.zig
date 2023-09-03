@@ -23,13 +23,13 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
     }
 
     return switch (try ch.code.get(offset)) {
-        @enumToInt(OP.RETURN) => simpleInstruction("OP_RETURN", offset),
-        @enumToInt(OP.NEGATE) => simpleInstruction("OP_NEGATE", offset),
-        @enumToInt(OP.ADD) => simpleInstruction("OP_ADD", offset),
-        @enumToInt(OP.SUBTRACT) => simpleInstruction("OP_SUBTRACT", offset),
-        @enumToInt(OP.DIVIDE) => simpleInstruction("OP_DIVIDE", offset),
-        @enumToInt(OP.MULTIPLY) => simpleInstruction("OP_MULTIPLY", offset),
-        @enumToInt(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
+        @intFromEnum(OP.RETURN) => simpleInstruction("OP_RETURN", offset),
+        @intFromEnum(OP.NEGATE) => simpleInstruction("OP_NEGATE", offset),
+        @intFromEnum(OP.ADD) => simpleInstruction("OP_ADD", offset),
+        @intFromEnum(OP.SUBTRACT) => simpleInstruction("OP_SUBTRACT", offset),
+        @intFromEnum(OP.DIVIDE) => simpleInstruction("OP_DIVIDE", offset),
+        @intFromEnum(OP.MULTIPLY) => simpleInstruction("OP_MULTIPLY", offset),
+        @intFromEnum(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
         else => blk: {
             print("Unknown opcode {}\n", .{try ch.code.get(offset)});
             break :blk offset + 1;
