@@ -46,13 +46,15 @@ pub const TokenType = enum {
     EOF,
 };
 
-pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter };
+pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString };
 
 pub const Token = struct {
     type: TokenType,
     lexeme: []const u8,
     line: i32,
 };
+
+const keywords: [][]const u8 = [_][]const u8{"while"};
 
 pub const Scanner = struct {
     pub fn init(source: []const u8) @This() {
@@ -82,12 +84,26 @@ pub const Scanner = struct {
             '=' => return self.makeToken(if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL),
             '<' => return self.makeToken(if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
             '>' => return self.makeToken(if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
+            '"' => return self.string(),
             '0'...'9' => return self.number(),
             'a'...'z', 'A'...'Z', '_' => return self.identifier(),
             else => return ScannerError.UnknownCharacter,
         }
 
         return ScannerError.UnexpectedCharacter;
+    }
+
+    fn string(self: *@This()) ScannerError!Token {
+        while (self.peek() != '"' and !self.isAtEnd()) {
+            if (self.peek() == '\n') self.line += 1;
+            _ = self.advance();
+        }
+
+        if (self.isAtEnd()) return ScannerError.UnterminatedString;
+
+        _ = self.advance();
+
+        return self.makeToken(TokenType.STRING);
     }
 
     fn skipWhitespace(self: *@This()) void {
@@ -124,8 +140,19 @@ pub const Scanner = struct {
         return self.makeToken(self.identifierType());
     }
 
-    fn identifierType(_: *const @This()) TokenType {
-        return TokenType.IDENTIFIER;
+    fn identifierType(self: *const @This()) TokenType {
+        return switch (self.start[0]) {
+            'a' => self.checkKeyword(1, "nd", TokenType.AND),
+            else => TokenType.IDENTIFIER,
+        };
+    }
+
+    fn checkKeyword(self: *const @This(), start: u8, rest: []const u8, token: TokenType) TokenType {
+        return if (@intFromPtr(self.current) - @intFromPtr(self.start) == start + rest.len and
+            std.mem.eql(u8, self.start[start .. start + rest.len], rest))
+            token
+        else
+            TokenType.IDENTIFIER;
     }
 
     fn advance(self: *@This()) u8 {
