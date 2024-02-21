@@ -27,7 +27,7 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    var text = try file.reader().readAllAlloc(allocator, 999999);
+    const text = try file.reader().readAllAlloc(allocator, 999999);
     defer allocator.free(text);
 }
 

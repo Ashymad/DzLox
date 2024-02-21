@@ -7,7 +7,7 @@
     .dependencies = .{
         .linenoize = .{
             .url = "https://github.com/joachimschmidt557/linenoize/archive/refs/heads/master.tar.gz",
-            .hash = "122095273d370fe3a29c2cd98027bae899065db6d759f3eacf049c4941af113b099c",
+            .hash = "12201240f2e3bd999a7846b8d408c2b59243f2ea427efe5cdb99091d28bb9ebc9287",
         },
     },
 }
