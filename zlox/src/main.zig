@@ -1,6 +1,9 @@
 const std = @import("std");
 const vm = @import("vm.zig");
-const Linenoise = @import("linenoize").Linenoise;
+const Linenoise = @cImport({
+    @cInclude("stddef.h");
+    @cInclude("linenoise.h");
+});
 
 pub fn main() anyerror!u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -32,15 +35,14 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
 }
 
 pub fn repl(allocator: std.mem.Allocator) anyerror!void {
-    var ln = Linenoise.init(allocator);
-    defer ln.deinit();
-
     var VM = vm.VM.init();
     defer VM.deinit();
 
-    while (try ln.linenoise("lox> ")) |input| {
-        defer allocator.free(input);
-        try VM.interpret(input);
-        try ln.history.add(input);
+    _ = Linenoise.linenoiseHistorySetMaxLen(100);
+
+    while (Linenoise.linenoise("lox> ")) |line| {
+        defer Linenoise.linenoiseFree(line);
+        try VM.interpret(std.mem.span(line), allocator);
+        _ = Linenoise.linenoiseHistoryAdd(line);
     }
 }

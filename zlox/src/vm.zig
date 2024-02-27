@@ -35,8 +35,8 @@ pub const VM = struct {
         try self.run(true);
     }
 
-    pub fn interpret(self: *@This(), source: []const u8) InterpreterError!void {
-        try compiler.compile(source);
+    pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) !void {
+        try compiler.compile(source, allocator);
         self.resetStack();
     }
 
@@ -59,7 +59,7 @@ pub const VM = struct {
         self.stackTop += 1;
     }
 
-    fn pop(self: *@This()) value.Value {
+    pub fn pop(self: *@This()) value.Value {
         self.stackTop -= 1;
         return self.stackTop[0];
     }
@@ -86,8 +86,6 @@ pub const VM = struct {
             const instruction: u8 = self.read_byte();
             switch (instruction) {
                 @intFromEnum(OP.RETURN) => {
-                    value.printValue(self.pop());
-                    std.debug.print("\n", .{});
                     return;
                 },
                 @intFromEnum(OP.CONSTANT) => {

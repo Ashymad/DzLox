@@ -3,8 +3,9 @@ const scanner = @import("scanner.zig");
 
 pub const CompilerError = scanner.ScannerError;
 
-pub fn compile(source: []const u8) CompilerError!void {
-    var Scanner = scanner.Scanner.init(source);
+pub fn compile(source: []const u8, allocator: std.mem.Allocator) !void {
+    var Scanner = try scanner.Scanner.init(source, allocator);
+    defer Scanner.deinit();
 
     var line: i32 = -1;
 
