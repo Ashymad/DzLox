@@ -15,7 +15,7 @@ pub fn main() anyerror!u8 {
     defer std.process.argsFree(allocator, args);
 
     if (args.len == 1) {
-        try repl(allocator);
+        try repl();
     } else if (args.len == 2) {
         try runFile(allocator, args[1]);
     } else {
@@ -34,7 +34,7 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
     defer allocator.free(text);
 }
 
-pub fn repl(allocator: std.mem.Allocator) anyerror!void {
+pub fn repl() anyerror!void {
     var VM = vm.VM.init();
     defer VM.deinit();
 
@@ -42,7 +42,7 @@ pub fn repl(allocator: std.mem.Allocator) anyerror!void {
 
     while (Linenoise.linenoise("lox> ")) |line| {
         defer Linenoise.linenoiseFree(line);
-        try VM.interpret(std.mem.span(line), allocator);
+        try VM.interpret(std.mem.span(line));
         _ = Linenoise.linenoiseHistoryAdd(line);
     }
 }

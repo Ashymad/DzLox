@@ -35,13 +35,7 @@ test "testChunk" {
 }
 
 test "testTrie" {
-    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(allocator.deinit() == std.heap.Check.ok);
-
-    var tr = try Trie(u8).init(allocator.allocator());
-    defer tr.deinit();
-
-    try tr.put("test", 16);
+    const tr = Trie(u8, .{.{ "test", 16 }});
 
     try std.testing.expectEqual(tr.get("test").?, 16);
     try std.testing.expectEqual(tr.get("tes"), null);

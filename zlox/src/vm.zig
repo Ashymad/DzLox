@@ -35,8 +35,8 @@ pub const VM = struct {
         try self.run(true);
     }
 
-    pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) !void {
-        try compiler.compile(source, allocator);
+    pub fn interpret(self: *@This(), source: []const u8) !void {
+        try compiler.compile(source);
         self.resetStack();
     }
 

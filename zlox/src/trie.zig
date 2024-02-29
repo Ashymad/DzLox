@@ -1,36 +1,50 @@
 const std = @import("std");
 
-pub fn TrieTable(comptime T: type) type {
-    return struct {
+pub fn TrieTable(comptime T: type, comptime list: anytype) type {
+    const TrieLeaf = struct {
         value: ?T,
         data: [26]?*@This(),
-        allocator: ?std.heap.ArenaAllocator,
+    };
 
-        pub fn init(allocator: std.mem.Allocator) !@This() {
-            return @This(){ .value = null, .data = [_]?*@This(){null} ** 26, .allocator = std.heap.ArenaAllocator.init(allocator) };
+    const max_len = comptime blk: {
+        var ret = 0;
+        for (list) |el| {
+            ret += el.@"0".len;
         }
+        break :blk ret;
+    };
 
-        pub fn put(self: *@This(), word: []const u8, value: T) !void {
-            var this = self;
-            const allo = self.allocator.?.allocator();
-            for (word) |ch| {
+    const precomputed = comptime blk: {
+        var allocated = [_]TrieLeaf{TrieLeaf{ .value = null, .data = [_]?*TrieLeaf{null} ** 26 }} ** max_len;
+        var allocated_i = 0;
+        var tip = TrieLeaf{ .value = null, .data = [_]?*TrieLeaf{null} ** 26 };
+
+        for (list) |el| {
+            var leaf = &tip;
+            for (el.@"0") |ch| {
                 const idx = ch - 'a';
-                if (this.data[idx]) |val| {
-                    this = val;
+                if (leaf.data[idx]) |val| {
+                    leaf = val;
                 } else {
-                    var new = try allo.create(@This());
+                    var new = &allocated[allocated_i];
+                    allocated_i += 1;
                     new.value = null;
-                    new.data = [_]?*@This(){null} ** 26;
-                    new.allocator = null;
-                    this.data[idx] = new;
-                    this = new;
+                    new.data = [_]?*TrieLeaf{null} ** 26;
+                    leaf.data[idx] = new;
+                    leaf = new;
                 }
             }
-            this.value = value;
+            leaf.value = el.@"1";
         }
+        break :blk .{ .allocated = allocated, .tip = tip };
+    };
 
-        pub fn get(self: *const @This(), word: []const u8) ?T {
-            var this = self;
+    return struct {
+        const allocated = precomputed.allocated;
+        const tip = precomputed.tip;
+
+        pub fn get(word: []const u8) ?T {
+            var this = &tip;
             for (word) |ch| {
                 if (ch < 'a' or ch > 'z') return null;
                 const idx = ch - 'a';
@@ -41,10 +55,6 @@ pub fn TrieTable(comptime T: type) type {
                 }
             }
             return this.value;
-        }
-
-        pub fn deinit(self: *@This()) void {
-            self.allocator.?.deinit();
         }
     };
 }

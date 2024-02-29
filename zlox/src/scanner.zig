@@ -56,29 +56,27 @@ pub const Token = struct {
 };
 
 pub const Scanner = struct {
-    pub fn init(source: []const u8, allocator: std.mem.Allocator) !@This() {
-        var this = @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line = 0, .identifiers = try trie.TrieTable(TokenType).init(allocator) };
-        try this.identifiers.put("and", TokenType.AND);
-        try this.identifiers.put("class", TokenType.CLASS);
-        try this.identifiers.put("else", TokenType.ELSE);
-        try this.identifiers.put("false", TokenType.FALSE);
-        try this.identifiers.put("for", TokenType.FOR);
-        try this.identifiers.put("fun", TokenType.FUN);
-        try this.identifiers.put("if", TokenType.IF);
-        try this.identifiers.put("nil", TokenType.NIL);
-        try this.identifiers.put("or", TokenType.OR);
-        try this.identifiers.put("print", TokenType.PRINT);
-        try this.identifiers.put("return", TokenType.RETURN);
-        try this.identifiers.put("super", TokenType.SUPER);
-        try this.identifiers.put("this", TokenType.THIS);
-        try this.identifiers.put("true", TokenType.TRUE);
-        try this.identifiers.put("var", TokenType.VAR);
-        try this.identifiers.put("while", TokenType.WHILE);
-        return this;
-    }
+    const identifiers = trie.TrieTable(TokenType, .{
+        .{ "and", TokenType.AND },
+        .{ "class", TokenType.CLASS },
+        .{ "else", TokenType.ELSE },
+        .{ "false", TokenType.FALSE },
+        .{ "for", TokenType.FOR },
+        .{ "fun", TokenType.FUN },
+        .{ "if", TokenType.IF },
+        .{ "nil", TokenType.NIL },
+        .{ "or", TokenType.OR },
+        .{ "print", TokenType.PRINT },
+        .{ "return", TokenType.RETURN },
+        .{ "super", TokenType.SUPER },
+        .{ "this", TokenType.THIS },
+        .{ "true", TokenType.TRUE },
+        .{ "var", TokenType.VAR },
+        .{ "while", TokenType.WHILE },
+    });
 
-    pub fn deinit(self: *@This()) void {
-        self.identifiers.deinit();
+    pub fn init(source: []const u8) !@This() {
+        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line = 0 };
     }
 
     pub fn scanToken(self: *@This()) ScannerError!Token {
@@ -161,7 +159,7 @@ pub const Scanner = struct {
     }
 
     fn identifierType(self: *const @This()) TokenType {
-        if (self.identifiers.get(self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))])) |tok| {
+        if (identifiers.get(self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))])) |tok| {
             return tok;
         } else {
             return TokenType.IDENTIFIER;
@@ -204,7 +202,6 @@ pub const Scanner = struct {
         return Token{ .type = tokentype, .lexeme = self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))], .line = self.line };
     }
 
-    identifiers: trie.TrieTable(TokenType),
     start: [*]const u8,
     current: [*]const u8,
     end: [*]const u8,
