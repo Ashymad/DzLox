@@ -36,7 +36,7 @@ pub fn TrieTable(comptime T: type, comptime list: anytype) type {
             }
             leaf.value = el.@"1";
         }
-        break :blk .{ .allocated = allocated, .tip = tip };
+        break :blk .{ .allocated = allocated[0..allocated_i], .tip = tip };
     };
 
     return struct {
