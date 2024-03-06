@@ -6,7 +6,7 @@ const debug = @import("debug.zig");
 const wrp = @import("wrap.zig");
 const compiler = @import("compiler.zig");
 
-pub const InterpreterError = compiler.CompilerError || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || error{ OutOfMemory, CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     ip: [*]const u8,
@@ -35,8 +35,13 @@ pub const VM = struct {
         try self.run(true);
     }
 
-    pub fn interpret(self: *@This(), source: []const u8) !void {
-        try compiler.compile(source);
+    pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) InterpreterError!void {
+        var chunk = try Chunk.init(allocator);
+        defer chunk.deinit();
+
+        try compiler.Compiler.compile(source, &chunk);
+
+        try self.interpretChunk(&chunk);
         self.resetStack();
     }
 
@@ -86,6 +91,7 @@ pub const VM = struct {
             const instruction: u8 = self.read_byte();
             switch (instruction) {
                 @intFromEnum(OP.RETURN) => {
+                    std.debug.print("{d}\n", .{self.pop()});
                     return;
                 },
                 @intFromEnum(OP.CONSTANT) => {

@@ -47,12 +47,24 @@ pub const TokenType = enum {
     EOF,
 };
 
-pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString };
+pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString, EmptyToken };
+
+pub fn ScannerErrorString(err: ScannerError) []const u8 {
+    return switch (err) {
+        ScannerError.UnknownCharacter => "Unknown Character",
+        ScannerError.UnexpectedCharacter => "Unexpected Character",
+        ScannerError.UnterminatedString => "Unterminated String",
+        ScannerError.EmptyToken => "Empty Token",
+    };
+}
 
 pub const Token = struct {
-    type: TokenType,
+    type: ScannerError!TokenType,
     lexeme: []const u8,
     line: i32,
+    column: usize,
+
+    pub const Empty = @This(){ .type = ScannerError.EmptyToken, .lexeme = "", .line = -1, .column = 0 };
 };
 
 pub const Scanner = struct {
@@ -76,15 +88,15 @@ pub const Scanner = struct {
     });
 
     pub fn init(source: []const u8) !@This() {
-        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line = 0 };
+        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line_ptr = source.ptr, .line = 0 };
     }
 
-    pub fn scanToken(self: *@This()) ScannerError!Token {
+    pub fn scanToken(self: *@This()) Token {
+        self.skipWhitespace();
+
         self.start = self.current;
 
         if (self.isAtEnd()) return self.makeToken(TokenType.EOF);
-
-        self.skipWhitespace();
 
         switch (self.advance()) {
             '(' => return self.makeToken(TokenType.LEFT_PAREN),
@@ -105,19 +117,19 @@ pub const Scanner = struct {
             '"' => return self.string(),
             '0'...'9' => return self.number(),
             'a'...'z', 'A'...'Z', '_' => return self.identifier(),
-            else => return ScannerError.UnknownCharacter,
+            else => return self.makeToken(ScannerError.UnknownCharacter),
         }
 
-        return ScannerError.UnexpectedCharacter;
+        return self.makeToken(ScannerError.UnexpectedCharacter);
     }
 
-    fn string(self: *@This()) ScannerError!Token {
+    fn string(self: *@This()) Token {
         while (self.peek() != '"' and !self.isAtEnd()) {
             if (self.peek() == '\n') self.line += 1;
             _ = self.advance();
         }
 
-        if (self.isAtEnd()) return ScannerError.UnterminatedString;
+        if (self.isAtEnd()) return self.makeToken(ScannerError.UnterminatedString);
 
         _ = self.advance();
 
@@ -131,6 +143,7 @@ pub const Scanner = struct {
                 '\n' => {
                     self.line += 1;
                     _ = self.advance();
+                    self.line_ptr = self.current;
                 },
                 '/' => {
                     if (self.peekNext() == '/') {
@@ -159,7 +172,7 @@ pub const Scanner = struct {
     }
 
     fn identifierType(self: *const @This()) TokenType {
-        if (identifiers.get(self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))])) |tok| {
+        if (identifiers.get(self.lexeme())) |tok| {
             return tok;
         } else {
             return TokenType.IDENTIFIER;
@@ -198,12 +211,25 @@ pub const Scanner = struct {
         return self.current == self.end;
     }
 
-    fn makeToken(self: *const @This(), tokentype: TokenType) Token {
-        return Token{ .type = tokentype, .lexeme = self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))], .line = self.line };
+    fn makeToken(self: *const @This(), tokentype: ScannerError!TokenType) Token {
+        return Token{ .type = tokentype, .lexeme = self.lexeme(), .line = self.line, .column = self.column() };
+    }
+
+    fn lexeme_len(self: *const @This()) usize {
+        return @intFromPtr(self.current) - @intFromPtr(self.start);
+    }
+
+    fn column(self: *const @This()) usize {
+        return @intFromPtr(self.start) - @intFromPtr(self.line_ptr);
+    }
+
+    fn lexeme(self: *const @This()) []const u8 {
+        return self.start[0..self.lexeme_len()];
     }
 
     start: [*]const u8,
     current: [*]const u8,
     end: [*]const u8,
+    line_ptr: [*]const u8,
     line: i32,
 };
