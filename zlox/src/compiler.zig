@@ -9,6 +9,7 @@ pub const CompilerError = scanner.ScannerError || chunk.ChunkError || value.Pars
 const Precedence = enum {
     NONE,
     ASSIGNMENT, // =
+    TERNARY, // ? :
     OR, // or
     AND, // and
     EQUALITY, // == !=
@@ -39,54 +40,66 @@ pub const Compiler = struct {
 
     const ParseFn = *const fn (*@This()) void;
 
-    const ParseRule = struct { prefix: ?ParseFn, infix: ?ParseFn, precedence: Precedence };
+    const ParseRule = struct {
+        prefix: ?ParseFn,
+        infix: ?ParseFn,
+        precedence: Precedence,
+        pub fn init(prefix: ?ParseFn, infix: ?ParseFn, precedence: Precedence) @This() {
+            return @This(){ .prefix = prefix, .infix = infix, .precedence = precedence };
+        }
+    };
 
     const rules = init: {
         var new: [@typeInfo(scanner.TokenType).Enum.fields.len]ParseRule = undefined;
         for (&new, 0..) |*v, i| {
-            const tok: scanner.TokenType = @enumFromInt(i);
             const T = scanner.TokenType;
+            const S = @This();
+            const R = ParseRule.init;
+            const P = Precedence;
+            const tok: T = @enumFromInt(i);
             v.* = switch (tok) {
                 // zig fmt: off
-                T.LEFT_PAREN    => ParseRule{ .prefix = @This().grouping, .infix = null,           .precedence = Precedence.NONE },
-                T.RIGHT_PAREN   => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.LEFT_BRACE    => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.RIGHT_BRACE   => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.COMMA         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.DOT           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.MINUS         => ParseRule{ .prefix = @This().unary,    .infix = @This().binary, .precedence = Precedence.TERM },
-                T.PLUS          => ParseRule{ .prefix = null,             .infix = @This().binary, .precedence = Precedence.TERM },
-                T.SEMICOLON     => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.SLASH         => ParseRule{ .prefix = null,             .infix = @This().binary, .precedence = Precedence.FACTOR },
-                T.STAR          => ParseRule{ .prefix = null,             .infix = @This().binary, .precedence = Precedence.FACTOR },
-                T.BANG          => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.BANG_EQUAL    => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.EQUAL         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.EQUAL_EQUAL   => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.GREATER       => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.GREATER_EQUAL => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.LESS          => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.LESS_EQUAL    => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.IDENTIFIER    => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.STRING        => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.NUMBER        => ParseRule{ .prefix = @This().number,   .infix = null,           .precedence = Precedence.NONE },
-                T.AND           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.CLASS         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.ELSE          => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.FALSE         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.FOR           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.FUN           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.IF            => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.NIL           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.OR            => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.PRINT         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.RETURN        => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.SUPER         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.THIS          => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.TRUE          => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.VAR           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.WHILE         => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
-                T.EOF           => ParseRule{ .prefix = null,             .infix = null,           .precedence = Precedence.NONE },
+                T.LEFT_PAREN    => R(S.grouping, null,      P.NONE ),
+                T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
+                T.LEFT_BRACE    => R(null,       null,      P.NONE ),
+                T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
+                T.COMMA         => R(null,       null,      P.NONE ),
+                T.DOT           => R(null,       null,      P.NONE ),
+                T.MINUS         => R(S.unary,    S.binary,  P.TERM ),
+                T.PLUS          => R(null,       S.binary,  P.TERM ),
+                T.COLON         => R(null,       null,      P.NONE ),
+                T.SEMICOLON     => R(null,       null,      P.NONE ),
+                T.SLASH         => R(null,       S.binary,  P.FACTOR ),
+                T.STAR          => R(null,       S.binary,  P.FACTOR ),
+                T.QUESTION      => R(null,       S.ternary, P.TERNARY ),
+                T.BANG          => R(null,       null,      P.NONE ),
+                T.BANG_EQUAL    => R(null,       null,      P.NONE ),
+                T.EQUAL         => R(null,       null,      P.NONE ),
+                T.EQUAL_EQUAL   => R(null,       null,      P.NONE ),
+                T.GREATER       => R(null,       null,      P.NONE ),
+                T.GREATER_EQUAL => R(null,       null,      P.NONE ),
+                T.LESS          => R(null,       null,      P.NONE ),
+                T.LESS_EQUAL    => R(null,       null,      P.NONE ),
+                T.IDENTIFIER    => R(null,       null,      P.NONE ),
+                T.STRING        => R(null,       null,      P.NONE ),
+                T.NUMBER        => R(S.number,   null,      P.NONE ),
+                T.AND           => R(null,       null,      P.NONE ),
+                T.CLASS         => R(null,       null,      P.NONE ),
+                T.ELSE          => R(null,       null,      P.NONE ),
+                T.FALSE         => R(null,       null,      P.NONE ),
+                T.FOR           => R(null,       null,      P.NONE ),
+                T.FUN           => R(null,       null,      P.NONE ),
+                T.IF            => R(null,       null,      P.NONE ),
+                T.NIL           => R(null,       null,      P.NONE ),
+                T.OR            => R(null,       null,      P.NONE ),
+                T.PRINT         => R(null,       null,      P.NONE ),
+                T.RETURN        => R(null,       null,      P.NONE ),
+                T.SUPER         => R(null,       null,      P.NONE ),
+                T.THIS          => R(null,       null,      P.NONE ),
+                T.TRUE          => R(null,       null,      P.NONE ),
+                T.VAR           => R(null,       null,      P.NONE ),
+                T.WHILE         => R(null,       null,      P.NONE ),
+                T.EOF           => R(null,       null,      P.NONE ),
                 // zig fmt: on
             };
         }
@@ -255,6 +268,19 @@ pub const Compiler = struct {
             scanner.TokenType.SLASH => self.emitOP(chunk.OP.DIVIDE),
             else => unreachable,
         }
+    }
+
+    fn ternary(self: *@This()) void {
+        const operatorType = self.previous.type catch unreachable;
+        self.parsePrecedence(getRule(operatorType).precedence.inc());
+
+        // emit bytecode
+
+        self.consume(scanner.TokenType.COLON, "Expected ':' in ternary expression.");
+
+        self.parsePrecedence(getRule(operatorType).precedence.inc());
+
+        // emit bytecode
     }
 
     pub fn compile(source: []const u8, ch: *chunk.Chunk) CompilerError!void {
