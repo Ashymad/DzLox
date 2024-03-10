@@ -70,7 +70,7 @@ pub const Token = struct {
 };
 
 pub const Scanner = struct {
-    const identifiers = trie.TrieTable(TokenType, .{
+    const identifiers = trie.LowercaseTrieTable(TokenType, .{
         .{ "and", TokenType.AND },
         .{ "class", TokenType.CLASS },
         .{ "else", TokenType.ELSE },

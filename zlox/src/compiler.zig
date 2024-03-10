@@ -1,10 +1,10 @@
 const std = @import("std");
 const scanner = @import("scanner.zig");
 const chunk = @import("chunk.zig");
-const value = @import("value.zig");
+const Value = @import("value.zig").Value;
 const debug = @import("debug.zig");
 
-pub const CompilerError = scanner.ScannerError || chunk.ChunkError || value.ParseValueError || error{ UnexpectedToken, NotAnExpression };
+pub const CompilerError = scanner.ScannerError || chunk.ChunkError || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
 const Precedence = enum {
     NONE,
@@ -72,7 +72,7 @@ pub const Compiler = struct {
                 T.SLASH         => R(null,       S.binary,  P.FACTOR ),
                 T.STAR          => R(null,       S.binary,  P.FACTOR ),
                 T.QUESTION      => R(null,       S.ternary, P.TERNARY ),
-                T.BANG          => R(null,       null,      P.NONE ),
+                T.BANG          => R(S.unary,    null,      P.NONE ),
                 T.BANG_EQUAL    => R(null,       null,      P.NONE ),
                 T.EQUAL         => R(null,       null,      P.NONE ),
                 T.EQUAL_EQUAL   => R(null,       null,      P.NONE ),
@@ -86,17 +86,17 @@ pub const Compiler = struct {
                 T.AND           => R(null,       null,      P.NONE ),
                 T.CLASS         => R(null,       null,      P.NONE ),
                 T.ELSE          => R(null,       null,      P.NONE ),
-                T.FALSE         => R(null,       null,      P.NONE ),
+                T.FALSE         => R(S.literal,  null,      P.NONE ),
                 T.FOR           => R(null,       null,      P.NONE ),
                 T.FUN           => R(null,       null,      P.NONE ),
                 T.IF            => R(null,       null,      P.NONE ),
-                T.NIL           => R(null,       null,      P.NONE ),
+                T.NIL           => R(S.literal,  null,      P.NONE ),
                 T.OR            => R(null,       null,      P.NONE ),
                 T.PRINT         => R(null,       null,      P.NONE ),
                 T.RETURN        => R(null,       null,      P.NONE ),
                 T.SUPER         => R(null,       null,      P.NONE ),
                 T.THIS          => R(null,       null,      P.NONE ),
-                T.TRUE          => R(null,       null,      P.NONE ),
+                T.TRUE          => R(S.literal,  null,      P.NONE ),
                 T.VAR           => R(null,       null,      P.NONE ),
                 T.WHILE         => R(null,       null,      P.NONE ),
                 T.EOF           => R(null,       null,      P.NONE ),
@@ -222,18 +222,18 @@ pub const Compiler = struct {
     }
 
     fn number(self: *@This()) void {
-        self.emitConstant(value.parseValue(self.previous.lexeme) catch |err| {
+        self.emitConstant(Value.parseNumber(self.previous.lexeme) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Invalid numeric literal");
             return;
         });
     }
 
-    fn emitConstant(self: *@This(), val: value.Value) void {
+    fn emitConstant(self: *@This(), val: Value) void {
         self.emit(chunk.OP.CONSTANT, self.makeConstant(val));
     }
 
-    fn makeConstant(self: *@This(), val: value.Value) u8 {
+    fn makeConstant(self: *@This(), val: Value) u8 {
         return self.currentChunk().addConstant(val) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Too many constants in one chunk");
@@ -253,6 +253,16 @@ pub const Compiler = struct {
 
         switch (operatorType) {
             scanner.TokenType.MINUS => self.emitOP(chunk.OP.NEGATE),
+            scanner.TokenType.BANG => self.emitOP(chunk.OP.NOT),
+            else => unreachable,
+        }
+    }
+
+    fn literal(self: *@This()) void {
+        switch (self.previous.type catch unreachable) {
+            scanner.TokenType.FALSE => self.emitOP(chunk.OP.FALSE),
+            scanner.TokenType.TRUE => self.emitOP(chunk.OP.TRUE),
+            scanner.TokenType.NIL => self.emitOP(chunk.OP.NIL),
             else => unreachable,
         }
     }

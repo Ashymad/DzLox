@@ -5,12 +5,16 @@ const array = @import("array.zig");
 
 pub const OP = enum(u8) {
     CONSTANT,
+    NIL,
+    TRUE,
+    FALSE,
     RETURN,
     NEGATE,
     ADD,
     SUBTRACT,
     MULTIPLY,
     DIVIDE,
+    NOT,
 };
 
 pub const ChunkError = error{OutOfMemory};
