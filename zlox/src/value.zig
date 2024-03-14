@@ -24,9 +24,7 @@ pub const Value = union(enum) {
     }
 
     pub fn new(comptime tag: Tag, value: tagType(tag)) @This() {
-        var ret = @This(){ .number = undefined };
-        ret.set(tag, value);
-        return ret;
+        return @unionInit(@This(), @tagName(tag), value);
     }
 
     pub fn get(self: @This(), comptime tag: Tag) tagType(tag) {
@@ -38,7 +36,7 @@ pub const Value = union(enum) {
     }
 
     pub fn tagType(comptime tag: Tag) type {
-        return @TypeOf(@field(@This(){ .number = undefined }, @tagName(tag)));
+        return @TypeOf(@field(@unionInit(@This(), @tagName(tag), undefined), @tagName(tag)));
     }
 
     pub const ParseNumberError = std.fmt.ParseFloatError;
@@ -52,6 +50,15 @@ pub const Value = union(enum) {
             .nil => false,
             .bool => |val| val,
             else => true,
+        };
+    }
+
+    pub fn equal(self: @This(), other: @This()) bool {
+        if (@intFromEnum(self) != @intFromEnum(other)) return false;
+        return switch (self) {
+            .number => |x| x == other.number,
+            .bool => |x| x == other.bool,
+            .nil => true,
         };
     }
 };

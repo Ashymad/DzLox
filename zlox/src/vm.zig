@@ -73,13 +73,13 @@ pub const VM = struct {
         return (self.stackTop - (1 + distance))[0];
     }
 
-    fn binary_op(self: *@This(), comptime tag: Value.Tag, op: fn (type, Value.tagType(tag), Value.tagType(tag)) Value.tagType(tag)) !void {
+    fn binary_op(self: *@This(), comptime in_tag: Value.Tag, comptime out_tag: Value.Tag, op: fn (type, Value.tagType(in_tag), Value.tagType(in_tag)) Value.tagType(out_tag)) !void {
         const b = self.pop();
         const a = self.pop();
-        if (a.is(tag) and b.is(tag)) {
-            self.push(Value.new(tag, op(Value.tagType(tag), a.get(tag), b.get(tag))));
+        if (a.is(in_tag) and b.is(in_tag)) {
+            self.push(Value.new(out_tag, op(Value.tagType(in_tag), a.get(in_tag), b.get(in_tag))));
         } else {
-            self.runtimeError("Operands have invalid types, expected: {s}", .{@tagName(tag)});
+            self.runtimeError("Operands have invalid types, expected: {s}", .{@tagName(in_tag)});
             return InterpreterError.RuntimeError;
         }
     }
@@ -119,12 +119,15 @@ pub const VM = struct {
                     }
                     self.push(Value{ .number = -self.pop().number });
                 },
-                @intFromEnum(OP.ADD) => try self.binary_op(Value.number, wrp.add),
-                @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, wrp.sub),
-                @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, wrp.mul),
-                @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, wrp.div),
+                @intFromEnum(OP.ADD) => try self.binary_op(Value.number, Value.number, wrp.add),
+                @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, wrp.sub),
+                @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, wrp.mul),
+                @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, wrp.div),
                 @intFromEnum(OP.TRUE) => self.push(Value{ .bool = true }),
                 @intFromEnum(OP.FALSE) => self.push(Value{ .bool = false }),
+                @intFromEnum(OP.EQUAL) => self.push(Value{ .bool = self.pop().equal(self.pop()) }),
+                @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, wrp.less),
+                @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, wrp.more),
                 @intFromEnum(OP.NIL) => self.push(Value{ .nil = undefined }),
                 @intFromEnum(OP.NOT) => self.push(Value{ .bool = !self.pop().isTruthy() }),
                 else => return InterpreterError.CompileError,

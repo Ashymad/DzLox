@@ -73,13 +73,13 @@ pub const Compiler = struct {
                 T.STAR          => R(null,       S.binary,  P.FACTOR ),
                 T.QUESTION      => R(null,       S.ternary, P.TERNARY ),
                 T.BANG          => R(S.unary,    null,      P.NONE ),
-                T.BANG_EQUAL    => R(null,       null,      P.NONE ),
+                T.BANG_EQUAL    => R(null,       S.binary,  P.EQUALITY ),
                 T.EQUAL         => R(null,       null,      P.NONE ),
-                T.EQUAL_EQUAL   => R(null,       null,      P.NONE ),
-                T.GREATER       => R(null,       null,      P.NONE ),
-                T.GREATER_EQUAL => R(null,       null,      P.NONE ),
-                T.LESS          => R(null,       null,      P.NONE ),
-                T.LESS_EQUAL    => R(null,       null,      P.NONE ),
+                T.EQUAL_EQUAL   => R(null,       S.binary,  P.EQUALITY ),
+                T.GREATER       => R(null,       S.binary,  P.COMPARISON ),
+                T.GREATER_EQUAL => R(null,       S.binary,  P.COMPARISON ),
+                T.LESS          => R(null,       S.binary,  P.COMPARISON ),
+                T.LESS_EQUAL    => R(null,       S.binary,  P.COMPARISON ),
                 T.IDENTIFIER    => R(null,       null,      P.NONE ),
                 T.STRING        => R(null,       null,      P.NONE ),
                 T.NUMBER        => R(S.number,   null,      P.NONE ),
@@ -146,6 +146,11 @@ pub const Compiler = struct {
     fn emit(self: *@This(), op: chunk.OP, byte: u8) void {
         self.emitOP(op);
         self.emitByte(byte);
+    }
+
+    fn emit2OP(self: *@This(), op: chunk.OP, op2: chunk.OP) void {
+        self.emitOP(op);
+        self.emitOP(op2);
     }
 
     fn endCompiler(self: *@This()) void {
@@ -276,6 +281,12 @@ pub const Compiler = struct {
             scanner.TokenType.MINUS => self.emitOP(chunk.OP.SUBTRACT),
             scanner.TokenType.STAR => self.emitOP(chunk.OP.MULTIPLY),
             scanner.TokenType.SLASH => self.emitOP(chunk.OP.DIVIDE),
+            scanner.TokenType.BANG_EQUAL => self.emit2OP(chunk.OP.EQUAL, chunk.OP.NOT),
+            scanner.TokenType.EQUAL_EQUAL => self.emitOP(chunk.OP.EQUAL),
+            scanner.TokenType.GREATER => self.emitOP(chunk.OP.GREATER),
+            scanner.TokenType.GREATER_EQUAL => self.emit2OP(chunk.OP.LESS, chunk.OP.NOT),
+            scanner.TokenType.LESS => self.emitOP(chunk.OP.LESS),
+            scanner.TokenType.LESS_EQUAL => self.emit2OP(chunk.OP.GREATER, chunk.OP.NOT),
             else => unreachable,
         }
     }
