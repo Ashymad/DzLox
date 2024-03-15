@@ -2,8 +2,9 @@ const std = @import("std");
 const chunk = @import("chunk.zig");
 const debug = @import("debug.zig");
 const vm = @import("vm.zig");
+const Trie = @import("trie.zig").TrieTable;
 
-fn testChunk() anyerror!void {
+test "testChunk" {
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(allocator.deinit() == std.heap.Check.ok);
     var ch = try chunk.Chunk.init(allocator.allocator());
@@ -29,4 +30,13 @@ fn testChunk() anyerror!void {
     try ch.writeOP(chunk.OP.RETURN, 123);
 
     try VM.interpretChunk(&ch);
+
+    try std.testing.expect(VM.pop() == -((1.2 + 3.4) / 5.6));
+}
+
+test "testTrie" {
+    const tr = Trie(u8, .{.{ "test", 16 }});
+
+    try std.testing.expectEqual(tr.get("test").?, 16);
+    try std.testing.expectEqual(tr.get("tes"), null);
 }

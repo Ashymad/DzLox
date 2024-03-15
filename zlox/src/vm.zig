@@ -1,27 +1,27 @@
 const Chunk = @import("chunk.zig").Chunk;
 const OP = @import("chunk.zig").OP;
-const value = @import("value.zig");
+const Value = @import("value.zig").Value;
 const std = @import("std");
 const debug = @import("debug.zig");
 const wrp = @import("wrap.zig");
 const compiler = @import("compiler.zig");
 
-pub const InterpreterError = compiler.CompilerError || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || error{ OutOfMemory, CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     ip: [*]const u8,
     chunk: *const Chunk,
     stack: stackType,
-    stackTop: [*]value.Value,
+    stackTop: [*]Value,
 
     const stackSize = 256;
-    const stackType = [stackSize]value.Value;
+    const stackType = [stackSize]Value;
 
     pub fn init() @This() {
         var ret = @This(){
             .ip = undefined,
             .chunk = undefined,
-            .stack = std.mem.zeroes(@This().stackType),
+            .stack = [_]Value{Value{ .number = 0 }} ** stackSize,
             .stackTop = undefined,
         };
         ret.stackTop = &ret.stack;
@@ -35,8 +35,13 @@ pub const VM = struct {
         try self.run(true);
     }
 
-    pub fn interpret(self: *@This(), source: []const u8) InterpreterError!void {
-        try compiler.compile(source);
+    pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) InterpreterError!void {
+        var chunk = try Chunk.init(allocator);
+        defer chunk.deinit();
+
+        try compiler.Compiler.compile(source, &chunk);
+
+        try self.interpretChunk(&chunk);
         self.resetStack();
     }
 
@@ -50,43 +55,56 @@ pub const VM = struct {
         return out;
     }
 
-    fn read_constant(self: *@This()) value.Value {
+    fn read_constant(self: *@This()) Value {
         return self.chunk.constants.data[self.read_byte()];
     }
 
-    fn push(self: *@This(), val: value.Value) void {
+    fn push(self: *@This(), val: Value) void {
         self.stackTop[0] = val;
         self.stackTop += 1;
     }
 
-    fn pop(self: *@This()) value.Value {
+    pub fn pop(self: *@This()) Value {
         self.stackTop -= 1;
         return self.stackTop[0];
     }
 
-    fn binary_op(self: *@This(), comptime op: fn (comptime T: type, value.Value, value.Value) value.Value) void {
+    pub fn peek(self: *const @This(), distance: usize) Value {
+        return (self.stackTop - (1 + distance))[0];
+    }
+
+    fn binary_op(self: *@This(), comptime in_tag: Value.Tag, comptime out_tag: Value.Tag, op: fn (type, Value.tagType(in_tag), Value.tagType(in_tag)) Value.tagType(out_tag)) !void {
         const b = self.pop();
         const a = self.pop();
-        self.push(op(value.Value, a, b));
+        if (a.is(in_tag) and b.is(in_tag)) {
+            self.push(Value.new(out_tag, op(Value.tagType(in_tag), a.get(in_tag), b.get(in_tag))));
+        } else {
+            self.runtimeError("Operands have invalid types, expected: {s}", .{@tagName(in_tag)});
+            return InterpreterError.RuntimeError;
+        }
+    }
+
+    fn instruction_idx(self: *const @This()) usize {
+        return @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr);
     }
 
     fn run(self: *@This(), comptime dbg: bool) !void {
         while (true) {
             if (dbg) {
                 std.debug.print("          ", .{});
-                var stackPtr: [*]value.Value = &self.stack;
+                var stackPtr: [*]Value = &self.stack;
                 while (stackPtr != self.stackTop) : (stackPtr += 1) {
                     std.debug.print("[ ", .{});
-                    value.printValue(stackPtr[0]);
+                    stackPtr[0].print();
                     std.debug.print(" ]", .{});
                 }
                 std.debug.print("\n", .{});
             }
-            _ = try debug.disassembleInstruction(self.chunk.*, @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr));
+            _ = try debug.disassembleInstruction(self.chunk.*, self.instruction_idx());
             const instruction: u8 = self.read_byte();
             switch (instruction) {
                 @intFromEnum(OP.RETURN) => {
-                    value.printValue(self.pop());
+                    self.pop().print();
                     std.debug.print("\n", .{});
                     return;
                 },
@@ -94,14 +112,33 @@ pub const VM = struct {
                     const constant = self.read_constant();
                     self.push(constant);
                 },
-                @intFromEnum(OP.NEGATE) => self.push(-self.pop()),
-                @intFromEnum(OP.ADD) => self.binary_op(wrp.add),
-                @intFromEnum(OP.SUBTRACT) => self.binary_op(wrp.sub),
-                @intFromEnum(OP.MULTIPLY) => self.binary_op(wrp.mul),
-                @intFromEnum(OP.DIVIDE) => self.binary_op(wrp.div),
+                @intFromEnum(OP.NEGATE) => {
+                    if (!self.peek(0).is(Value.number)) {
+                        self.runtimeError("Operand must be a number.", .{});
+                        return InterpreterError.RuntimeError;
+                    }
+                    self.push(Value{ .number = -self.pop().number });
+                },
+                @intFromEnum(OP.ADD) => try self.binary_op(Value.number, Value.number, wrp.add),
+                @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, wrp.sub),
+                @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, wrp.mul),
+                @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, wrp.div),
+                @intFromEnum(OP.TRUE) => self.push(Value{ .bool = true }),
+                @intFromEnum(OP.FALSE) => self.push(Value{ .bool = false }),
+                @intFromEnum(OP.EQUAL) => self.push(Value{ .bool = self.pop().equal(self.pop()) }),
+                @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, wrp.less),
+                @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, wrp.more),
+                @intFromEnum(OP.NIL) => self.push(Value{ .nil = undefined }),
+                @intFromEnum(OP.NOT) => self.push(Value{ .bool = !self.pop().isTruthy() }),
                 else => return InterpreterError.CompileError,
             }
         }
+    }
+
+    fn runtimeError(self: *@This(), comptime fmt: []const u8, args: anytype) void {
+        std.debug.print(fmt, args);
+        std.debug.print("\n[line {d}] in script\n", .{self.chunk.lines.get(self.instruction_idx()) catch 0});
+        self.resetStack();
     }
 
     pub fn deinit(_: *@This()) void {}

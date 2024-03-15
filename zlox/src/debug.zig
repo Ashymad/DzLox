@@ -29,6 +29,13 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.SUBTRACT) => simpleInstruction("OP_SUBTRACT", offset),
         @intFromEnum(OP.DIVIDE) => simpleInstruction("OP_DIVIDE", offset),
         @intFromEnum(OP.MULTIPLY) => simpleInstruction("OP_MULTIPLY", offset),
+        @intFromEnum(OP.TRUE) => simpleInstruction("OP_TRUE", offset),
+        @intFromEnum(OP.FALSE) => simpleInstruction("OP_FALSE", offset),
+        @intFromEnum(OP.EQUAL) => simpleInstruction("OP_EQUAL", offset),
+        @intFromEnum(OP.LESS) => simpleInstruction("OP_LESS", offset),
+        @intFromEnum(OP.GREATER) => simpleInstruction("OP_GREATER", offset),
+        @intFromEnum(OP.NIL) => simpleInstruction("OP_NIL", offset),
+        @intFromEnum(OP.NOT) => simpleInstruction("OP_NOT", offset),
         @intFromEnum(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
         else => blk: {
             print("Unknown opcode {}\n", .{try ch.code.get(offset)});
@@ -45,7 +52,7 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 fn constantInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
     const constant = try ch.code.get(offset + 1);
     print("{s:<16} {d:4} '", .{ name, constant });
-    value.printValue(try ch.constants.get(constant));
+    (try ch.constants.get(constant)).print();
     print("'\n", .{});
     return offset + 2;
 }

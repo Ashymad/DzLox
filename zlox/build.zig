@@ -24,14 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const linenoize = b.dependency("linenoize", .{ // <== as declared in build.zig.zon
-        .target = target, // the same as passing `-Dtarget=<...>` to the library's build.zig script
-        .optimize = optimize, // ditto for `-Doptimize=<...>`
-    }).module("linenoise");
-
-    // your executable config
-    exe.addModule("linenoize", linenoize); // <== for zig project
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
@@ -60,10 +52,12 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    exe.linkLibC();
+    exe.linkSystemLibrary("linenoise");
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/test.zig" },
         .target = target,
         .optimize = optimize,
     });

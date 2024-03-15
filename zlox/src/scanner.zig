@@ -1,4 +1,5 @@
 const std = @import("std");
+const trie = @import("trie.zig");
 
 pub const TokenType = enum {
     LEFT_PAREN,
@@ -9,9 +10,11 @@ pub const TokenType = enum {
     DOT,
     MINUS,
     PLUS,
+    COLON,
     SEMICOLON,
     SLASH,
     STAR,
+    QUESTION,
     // One or two character tokens.
     BANG,
     BANG_EQUAL,
@@ -46,33 +49,63 @@ pub const TokenType = enum {
     EOF,
 };
 
-pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString };
+pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString, EmptyToken };
+
+pub fn ScannerErrorString(err: ScannerError) []const u8 {
+    return switch (err) {
+        ScannerError.UnknownCharacter => "Unknown Character",
+        ScannerError.UnexpectedCharacter => "Unexpected Character",
+        ScannerError.UnterminatedString => "Unterminated String",
+        ScannerError.EmptyToken => "Empty Token",
+    };
+}
 
 pub const Token = struct {
-    type: TokenType,
+    type: ScannerError!TokenType,
     lexeme: []const u8,
     line: i32,
+    column: usize,
+
+    pub const Empty = @This(){ .type = ScannerError.EmptyToken, .lexeme = "", .line = -1, .column = 0 };
 };
 
-const keywords: [][]const u8 = [_][]const u8{"while"};
-
 pub const Scanner = struct {
-    pub fn init(source: []const u8) @This() {
-        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line = 0 };
+    const identifiers = trie.LowercaseTrieTable(TokenType, .{
+        .{ "and", TokenType.AND },
+        .{ "class", TokenType.CLASS },
+        .{ "else", TokenType.ELSE },
+        .{ "false", TokenType.FALSE },
+        .{ "for", TokenType.FOR },
+        .{ "fun", TokenType.FUN },
+        .{ "if", TokenType.IF },
+        .{ "nil", TokenType.NIL },
+        .{ "or", TokenType.OR },
+        .{ "print", TokenType.PRINT },
+        .{ "return", TokenType.RETURN },
+        .{ "super", TokenType.SUPER },
+        .{ "this", TokenType.THIS },
+        .{ "true", TokenType.TRUE },
+        .{ "var", TokenType.VAR },
+        .{ "while", TokenType.WHILE },
+    });
+
+    pub fn init(source: []const u8) !@This() {
+        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line_ptr = source.ptr, .line = 0 };
     }
 
-    pub fn scanToken(self: *@This()) ScannerError!Token {
+    pub fn scanToken(self: *@This()) Token {
+        self.skipWhitespace();
+
         self.start = self.current;
 
         if (self.isAtEnd()) return self.makeToken(TokenType.EOF);
-
-        self.skipWhitespace();
 
         switch (self.advance()) {
             '(' => return self.makeToken(TokenType.LEFT_PAREN),
             ')' => return self.makeToken(TokenType.RIGHT_PAREN),
             '{' => return self.makeToken(TokenType.LEFT_BRACE),
             '}' => return self.makeToken(TokenType.RIGHT_BRACE),
+            ':' => return self.makeToken(TokenType.COLON),
             ';' => return self.makeToken(TokenType.SEMICOLON),
             ',' => return self.makeToken(TokenType.COMMA),
             '.' => return self.makeToken(TokenType.DOT),
@@ -80,6 +113,7 @@ pub const Scanner = struct {
             '+' => return self.makeToken(TokenType.PLUS),
             '/' => return self.makeToken(TokenType.SLASH),
             '*' => return self.makeToken(TokenType.STAR),
+            '?' => return self.makeToken(TokenType.QUESTION),
             '!' => return self.makeToken(if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG),
             '=' => return self.makeToken(if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL),
             '<' => return self.makeToken(if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
@@ -87,19 +121,19 @@ pub const Scanner = struct {
             '"' => return self.string(),
             '0'...'9' => return self.number(),
             'a'...'z', 'A'...'Z', '_' => return self.identifier(),
-            else => return ScannerError.UnknownCharacter,
+            else => return self.makeToken(ScannerError.UnknownCharacter),
         }
 
-        return ScannerError.UnexpectedCharacter;
+        return self.makeToken(ScannerError.UnexpectedCharacter);
     }
 
-    fn string(self: *@This()) ScannerError!Token {
+    fn string(self: *@This()) Token {
         while (self.peek() != '"' and !self.isAtEnd()) {
             if (self.peek() == '\n') self.line += 1;
             _ = self.advance();
         }
 
-        if (self.isAtEnd()) return ScannerError.UnterminatedString;
+        if (self.isAtEnd()) return self.makeToken(ScannerError.UnterminatedString);
 
         _ = self.advance();
 
@@ -113,6 +147,7 @@ pub const Scanner = struct {
                 '\n' => {
                     self.line += 1;
                     _ = self.advance();
+                    self.line_ptr = self.current;
                 },
                 '/' => {
                     if (self.peekNext() == '/') {
@@ -141,18 +176,11 @@ pub const Scanner = struct {
     }
 
     fn identifierType(self: *const @This()) TokenType {
-        return switch (self.start[0]) {
-            'a' => self.checkKeyword(1, "nd", TokenType.AND),
-            else => TokenType.IDENTIFIER,
-        };
-    }
-
-    fn checkKeyword(self: *const @This(), start: u8, rest: []const u8, token: TokenType) TokenType {
-        return if (@intFromPtr(self.current) - @intFromPtr(self.start) == start + rest.len and
-            std.mem.eql(u8, self.start[start .. start + rest.len], rest))
-            token
-        else
-            TokenType.IDENTIFIER;
+        if (identifiers.get(self.lexeme())) |tok| {
+            return tok;
+        } else {
+            return TokenType.IDENTIFIER;
+        }
     }
 
     fn advance(self: *@This()) u8 {
@@ -187,12 +215,25 @@ pub const Scanner = struct {
         return self.current == self.end;
     }
 
-    fn makeToken(self: *const @This(), tokentype: TokenType) Token {
-        return Token{ .type = tokentype, .lexeme = self.start[0..(@intFromPtr(self.current) - @intFromPtr(self.start))], .line = self.line };
+    fn makeToken(self: *const @This(), tokentype: ScannerError!TokenType) Token {
+        return Token{ .type = tokentype, .lexeme = self.lexeme(), .line = self.line, .column = self.column() };
+    }
+
+    fn lexeme_len(self: *const @This()) usize {
+        return @intFromPtr(self.current) - @intFromPtr(self.start);
+    }
+
+    fn column(self: *const @This()) usize {
+        return @intFromPtr(self.start) - @intFromPtr(self.line_ptr);
+    }
+
+    fn lexeme(self: *const @This()) []const u8 {
+        return self.start[0..self.lexeme_len()];
     }
 
     start: [*]const u8,
     current: [*]const u8,
     end: [*]const u8,
+    line_ptr: [*]const u8,
     line: i32,
 };
