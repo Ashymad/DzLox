@@ -20,10 +20,10 @@ pub const OP = enum(u8) {
     NOT,
 };
 
-pub const ChunkError = error{OutOfMemory};
-
 pub const Chunk = struct {
-    pub fn init(allocator: std.mem.Allocator) ChunkError!@This() {
+    pub const Error = error{OutOfMemory};
+
+    pub fn init(allocator: std.mem.Allocator) Error!@This() {
         return @This(){
             .code = try array.Array(u8, usize, 8).init(allocator),
             .constants = try ValueArray.init(allocator),
@@ -31,16 +31,16 @@ pub const Chunk = struct {
         };
     }
 
-    pub fn write(self: *@This(), byte: u8, line: i32) ChunkError!void {
+    pub fn write(self: *@This(), byte: u8, line: i32) Error!void {
         try self.code.add(byte);
         try self.lines.add(line);
     }
 
-    pub fn writeOP(self: *@This(), op: OP, line: i32) ChunkError!void {
+    pub fn writeOP(self: *@This(), op: OP, line: i32) Error!void {
         try self.write(@intFromEnum(op), line);
     }
 
-    pub fn addConstant(self: *@This(), val: value.Value) ChunkError!u8 {
+    pub fn addConstant(self: *@This(), val: value.Value) Error!u8 {
         try self.constants.add(val);
         return self.constants.len - 1;
     }

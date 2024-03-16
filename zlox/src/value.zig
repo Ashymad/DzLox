@@ -1,10 +1,12 @@
 const std = @import("std");
 const array = @import("array.zig");
+const Obj = @import("obj.zig").Obj;
 
 pub const Value = union(enum) {
     number: f64,
     bool: bool,
     nil: void,
+    obj: *Obj,
 
     pub const Tag = std.meta.Tag(@This());
 
@@ -13,30 +15,39 @@ pub const Value = union(enum) {
             .number => |val| std.debug.print("{d}", .{val}),
             .bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
             .nil => std.debug.print("nil", .{}),
+            .obj => |o| o.print(),
         }
     }
 
-    pub fn is(self: @This(), comptime tag: Tag) bool {
+    fn toTag(comptime from: anytype) Tag {
+        if (@TypeOf(from) == Obj.Type) {
+            return .obj;
+        } else {
+            return from;
+        }
+    }
+
+    pub fn is(self: @This(), comptime tag: anytype) bool {
         return switch (self) {
-            tag => true,
+            toTag(tag) => @TypeOf(tag) == Tag or self.obj.is(tag),
             else => false,
         };
     }
 
-    pub fn new(comptime tag: Tag, value: tagType(tag)) @This() {
-        return @unionInit(@This(), @tagName(tag), value);
+    pub fn new(comptime tag: anytype, value: tagType(tag)) @This() {
+        return @unionInit(@This(), @tagName(toTag(tag)), value);
     }
 
-    pub fn get(self: @This(), comptime tag: Tag) tagType(tag) {
-        return @field(self, @tagName(tag));
+    pub fn get(self: @This(), comptime tag: anytype) tagType(tag) {
+        return @field(self, @tagName(toTag(tag)));
     }
 
-    pub fn set(self: *@This(), comptime tag: Tag, value: tagType(tag)) void {
-        @field(self, @tagName(tag)) = value;
+    pub fn set(self: *@This(), comptime tag: anytype, value: tagType(tag)) void {
+        @field(self, @tagName(toTag(tag))) = value;
     }
 
-    pub fn tagType(comptime tag: Tag) type {
-        return @TypeOf(@field(@unionInit(@This(), @tagName(tag), undefined), @tagName(tag)));
+    pub fn tagType(comptime tag: anytype) type {
+        return @TypeOf(@field(@unionInit(@This(), @tagName(toTag(tag)), undefined), @tagName(toTag(tag))));
     }
 
     pub const ParseNumberError = std.fmt.ParseFloatError;
@@ -59,6 +70,7 @@ pub const Value = union(enum) {
             .number => |x| x == other.number,
             .bool => |x| x == other.bool,
             .nil => true,
+            .obj => |x| x.equal(other.obj),
         };
     }
 };

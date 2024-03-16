@@ -2,9 +2,10 @@ const std = @import("std");
 const scanner = @import("scanner.zig");
 const chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
+const Obj = @import("obj.zig").Obj;
 const debug = @import("debug.zig");
 
-pub const CompilerError = scanner.ScannerError || chunk.ChunkError || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
+pub const CompilerError = scanner.ScannerError || chunk.Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
 const Precedence = enum {
     NONE,
@@ -37,6 +38,7 @@ pub const Compiler = struct {
     hadError: bool,
     panicMode: bool,
     compilingChunk: *chunk.Chunk,
+    allocator: std.mem.Allocator,
 
     const ParseFn = *const fn (*@This()) void;
 
@@ -81,7 +83,7 @@ pub const Compiler = struct {
                 T.LESS          => R(null,       S.binary,  P.COMPARISON ),
                 T.LESS_EQUAL    => R(null,       S.binary,  P.COMPARISON ),
                 T.IDENTIFIER    => R(null,       null,      P.NONE ),
-                T.STRING        => R(null,       null,      P.NONE ),
+                T.STRING        => R(S.string,   null,      P.NONE ),
                 T.NUMBER        => R(S.number,   null,      P.NONE ),
                 T.AND           => R(null,       null,      P.NONE ),
                 T.CLASS         => R(null,       null,      P.NONE ),
@@ -234,6 +236,15 @@ pub const Compiler = struct {
         });
     }
 
+    fn string(self: *@This()) void {
+        const ret = Obj.String.init(self.previous.lexeme[1 .. self.previous.lexeme.len - 1], self.allocator) catch |err| {
+            self.lastError = err;
+            self.errorAtPrevious("Out of memory");
+            return;
+        };
+        self.emitConstant(Value{ .obj = ret.cast() });
+    }
+
     fn emitConstant(self: *@This(), val: Value) void {
         self.emit(chunk.OP.CONSTANT, self.makeConstant(val));
     }
@@ -304,8 +315,8 @@ pub const Compiler = struct {
         // emit bytecode
     }
 
-    pub fn compile(source: []const u8, ch: *chunk.Chunk) CompilerError!void {
-        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = ch };
+    pub fn compile(source: []const u8, ch: *chunk.Chunk, allocator: std.mem.Allocator) CompilerError!void {
+        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = ch, .allocator = allocator };
         self.advance();
         self.expression();
         self.consume(scanner.TokenType.EOF, "Expected end of expression.");

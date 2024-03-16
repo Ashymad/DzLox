@@ -3,10 +3,11 @@ const OP = @import("chunk.zig").OP;
 const Value = @import("value.zig").Value;
 const std = @import("std");
 const debug = @import("debug.zig");
-const wrp = @import("wrap.zig");
 const compiler = @import("compiler.zig");
+const Obj = @import("obj.zig").Obj;
+const Callback = @import("vm_callbacks.zig");
 
-pub const InterpreterError = compiler.CompilerError || error{ OutOfMemory, CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || Callback.Error || Chunk.Error || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     ip: [*]const u8,
@@ -28,20 +29,20 @@ pub const VM = struct {
         return ret;
     }
 
-    pub fn interpretChunk(self: *@This(), chunk: *const Chunk) InterpreterError!void {
+    pub fn interpretChunk(self: *@This(), chunk: *const Chunk, allocator: std.mem.Allocator) InterpreterError!void {
         self.resetStack();
         self.chunk = chunk;
         self.ip = chunk.code.data.ptr;
-        try self.run(true);
+        try self.run(true, allocator);
     }
 
     pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) InterpreterError!void {
         var chunk = try Chunk.init(allocator);
         defer chunk.deinit();
 
-        try compiler.Compiler.compile(source, &chunk);
+        try compiler.Compiler.compile(source, &chunk, allocator);
 
-        try self.interpretChunk(&chunk);
+        try self.interpretChunk(&chunk, allocator);
         self.resetStack();
     }
 
@@ -73,11 +74,11 @@ pub const VM = struct {
         return (self.stackTop - (1 + distance))[0];
     }
 
-    fn binary_op(self: *@This(), comptime in_tag: Value.Tag, comptime out_tag: Value.Tag, op: fn (type, Value.tagType(in_tag), Value.tagType(in_tag)) Value.tagType(out_tag)) !void {
+    fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
         const b = self.pop();
         const a = self.pop();
         if (a.is(in_tag) and b.is(in_tag)) {
-            self.push(Value.new(out_tag, op(Value.tagType(in_tag), a.get(in_tag), b.get(in_tag))));
+            self.push(Value.new(out_tag, try op.call(a.get(in_tag), b.get(in_tag))));
         } else {
             self.runtimeError("Operands have invalid types, expected: {s}", .{@tagName(in_tag)});
             return InterpreterError.RuntimeError;
@@ -88,7 +89,7 @@ pub const VM = struct {
         return @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr);
     }
 
-    fn run(self: *@This(), comptime dbg: bool) !void {
+    fn run(self: *@This(), comptime dbg: bool, allocator: std.mem.Allocator) !void {
         while (true) {
             if (dbg) {
                 std.debug.print("          ", .{});
@@ -119,15 +120,21 @@ pub const VM = struct {
                     }
                     self.push(Value{ .number = -self.pop().number });
                 },
-                @intFromEnum(OP.ADD) => try self.binary_op(Value.number, Value.number, wrp.add),
-                @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, wrp.sub),
-                @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, wrp.mul),
-                @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, wrp.div),
+                @intFromEnum(OP.ADD) => {
+                    if (self.peek(0).is(Obj.Type.String)) {
+                        try self.binary_op(Obj.Type.String, Obj.Type.String, Callback.concatenate(allocator));
+                    } else {
+                        try self.binary_op(Value.number, Value.number, Callback.add);
+                    }
+                },
+                @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
+                @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, Callback.mul),
+                @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, Callback.div),
                 @intFromEnum(OP.TRUE) => self.push(Value{ .bool = true }),
                 @intFromEnum(OP.FALSE) => self.push(Value{ .bool = false }),
                 @intFromEnum(OP.EQUAL) => self.push(Value{ .bool = self.pop().equal(self.pop()) }),
-                @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, wrp.less),
-                @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, wrp.more),
+                @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, Callback.less),
+                @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, Callback.more),
                 @intFromEnum(OP.NIL) => self.push(Value{ .nil = undefined }),
                 @intFromEnum(OP.NOT) => self.push(Value{ .bool = !self.pop().isTruthy() }),
                 else => return InterpreterError.CompileError,
