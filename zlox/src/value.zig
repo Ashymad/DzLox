@@ -20,11 +20,10 @@ pub const Value = union(enum) {
     }
 
     fn toTag(comptime from: anytype) Tag {
-        if (@TypeOf(from) == Obj.Type) {
-            return .obj;
-        } else {
-            return from;
-        }
+        return if (@TypeOf(from) == Obj.Type)
+            .obj
+        else
+            from;
     }
 
     pub fn is(self: @This(), comptime tag: anytype) bool {

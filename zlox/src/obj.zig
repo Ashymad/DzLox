@@ -2,17 +2,26 @@ const std = @import("std");
 
 pub const Obj = packed struct {
     const Self = @This();
+    pub const Error = error{IllegalCastError};
+
+    type: Type,
+    next: ?*Self = null,
 
     pub const String = struct {
         obj: Self,
         len: usize,
+        fn ptr(self: *const @This()) []align(@alignOf(@This())) const u8 {
+            const p: [*]align(@alignOf(@This())) const u8 = @ptrCast(self);
+            return p[0 .. @sizeOf(@This()) + self.len];
+        }
+
         fn data(self: *@This()) [*]u8 {
-            const ptr: [*]u8 = @ptrCast(self);
-            return ptr + @sizeOf(@This());
+            const p: [*]u8 = @ptrCast(self);
+            return p + @sizeOf(@This());
         }
         fn cdata(self: *const @This()) [*]const u8 {
-            const ptr: [*]const u8 = @ptrCast(self);
-            return ptr + @sizeOf(@This());
+            const p: [*]const u8 = @ptrCast(self);
+            return p + @sizeOf(@This());
         }
         fn new(len: usize, allocator: std.mem.Allocator) !*@This() {
             const ret: *@This() = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(@This()), @sizeOf(@This()) + len));
@@ -48,8 +57,11 @@ pub const Obj = packed struct {
         }
     };
 
-    const Error = error{IllegalCastError};
-    type: Type,
+    pub fn free(obj: *Self, allocator: std.mem.Allocator) void {
+        return switch (obj.type) {
+            .String => allocator.free(obj._cast(.String).ptr()),
+        };
+    }
 
     pub fn is(self: *const Self, tp: Type) bool {
         return self.type == tp;

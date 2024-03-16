@@ -7,11 +7,11 @@ const compiler = @import("compiler.zig");
 const Obj = @import("obj.zig").Obj;
 const Callback = @import("vm_callbacks.zig");
 
-pub const InterpreterError = compiler.CompilerError || Callback.Error || Chunk.Error || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     ip: [*]const u8,
-    chunk: *const Chunk,
+    chunk: *Chunk,
     stack: stackType,
     stackTop: [*]Value,
 
@@ -29,7 +29,7 @@ pub const VM = struct {
         return ret;
     }
 
-    pub fn interpretChunk(self: *@This(), chunk: *const Chunk, allocator: std.mem.Allocator) InterpreterError!void {
+    pub fn interpretChunk(self: *@This(), chunk: *Chunk, allocator: std.mem.Allocator) InterpreterError!void {
         self.resetStack();
         self.chunk = chunk;
         self.ip = chunk.code.data.ptr;
@@ -37,10 +37,8 @@ pub const VM = struct {
     }
 
     pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) InterpreterError!void {
-        var chunk = try Chunk.init(allocator);
+        var chunk = try compiler.Compiler.compile(source, allocator);
         defer chunk.deinit();
-
-        try compiler.Compiler.compile(source, &chunk, allocator);
 
         try self.interpretChunk(&chunk, allocator);
         self.resetStack();
@@ -70,7 +68,7 @@ pub const VM = struct {
         return self.stackTop[0];
     }
 
-    pub fn peek(self: *const @This(), distance: usize) Value {
+    pub fn peek(self: *@This(), distance: usize) Value {
         return (self.stackTop - (1 + distance))[0];
     }
 
@@ -123,6 +121,7 @@ pub const VM = struct {
                 @intFromEnum(OP.ADD) => {
                     if (self.peek(0).is(Obj.Type.String)) {
                         try self.binary_op(Obj.Type.String, Obj.Type.String, Callback.concatenate(allocator));
+                        self.chunk.addObject(self.peek(0));
                     } else {
                         try self.binary_op(Value.number, Value.number, Callback.add);
                     }

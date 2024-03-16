@@ -1,11 +1,12 @@
 const std = @import("std");
 const scanner = @import("scanner.zig");
-const chunk = @import("chunk.zig");
+const Chunk = @import("chunk.zig").Chunk;
+const OP = @import("chunk.zig").OP;
 const Value = @import("value.zig").Value;
 const Obj = @import("obj.zig").Obj;
 const debug = @import("debug.zig");
 
-pub const CompilerError = scanner.ScannerError || chunk.Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
+pub const CompilerError = scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
 const Precedence = enum {
     NONE,
@@ -37,7 +38,7 @@ pub const Compiler = struct {
     lastError: CompilerError,
     hadError: bool,
     panicMode: bool,
-    compilingChunk: *chunk.Chunk,
+    compilingChunk: Chunk,
     allocator: std.mem.Allocator,
 
     const ParseFn = *const fn (*@This()) void;
@@ -127,8 +128,8 @@ pub const Compiler = struct {
         }
     }
 
-    fn currentChunk(self: *@This()) *chunk.Chunk {
-        return self.compilingChunk;
+    fn currentChunk(self: *@This()) *Chunk {
+        return &self.compilingChunk;
     }
 
     fn emitByte(self: *@This(), byte: u8) void {
@@ -138,19 +139,19 @@ pub const Compiler = struct {
         };
     }
 
-    fn emitOP(self: *@This(), op: chunk.OP) void {
+    fn emitOP(self: *@This(), op: OP) void {
         self.currentChunk().writeOP(op, self.previous.line) catch |err| {
             self.lastError = err;
             self.errorAtCurrent("Out of Memory");
         };
     }
 
-    fn emit(self: *@This(), op: chunk.OP, byte: u8) void {
+    fn emit(self: *@This(), op: OP, byte: u8) void {
         self.emitOP(op);
         self.emitByte(byte);
     }
 
-    fn emit2OP(self: *@This(), op: chunk.OP, op2: chunk.OP) void {
+    fn emit2OP(self: *@This(), op: OP, op2: OP) void {
         self.emitOP(op);
         self.emitOP(op2);
     }
@@ -165,7 +166,7 @@ pub const Compiler = struct {
     }
 
     fn emitReturn(self: *@This()) void {
-        self.emitOP(chunk.OP.RETURN);
+        self.emitOP(OP.RETURN);
     }
 
     fn errorAtCurrent(self: *@This(), message: []const u8) void {
@@ -239,14 +240,14 @@ pub const Compiler = struct {
     fn string(self: *@This()) void {
         const ret = Obj.String.init(self.previous.lexeme[1 .. self.previous.lexeme.len - 1], self.allocator) catch |err| {
             self.lastError = err;
-            self.errorAtPrevious("Out of memory");
+            self.errorAtPrevious("Couldn't allocate object");
             return;
         };
         self.emitConstant(Value{ .obj = ret.cast() });
     }
 
     fn emitConstant(self: *@This(), val: Value) void {
-        self.emit(chunk.OP.CONSTANT, self.makeConstant(val));
+        self.emit(OP.CONSTANT, self.makeConstant(val));
     }
 
     fn makeConstant(self: *@This(), val: Value) u8 {
@@ -268,17 +269,17 @@ pub const Compiler = struct {
         self.parsePrecedence(Precedence.UNARY);
 
         switch (operatorType) {
-            scanner.TokenType.MINUS => self.emitOP(chunk.OP.NEGATE),
-            scanner.TokenType.BANG => self.emitOP(chunk.OP.NOT),
+            scanner.TokenType.MINUS => self.emitOP(OP.NEGATE),
+            scanner.TokenType.BANG => self.emitOP(OP.NOT),
             else => unreachable,
         }
     }
 
     fn literal(self: *@This()) void {
         switch (self.previous.type catch unreachable) {
-            scanner.TokenType.FALSE => self.emitOP(chunk.OP.FALSE),
-            scanner.TokenType.TRUE => self.emitOP(chunk.OP.TRUE),
-            scanner.TokenType.NIL => self.emitOP(chunk.OP.NIL),
+            scanner.TokenType.FALSE => self.emitOP(OP.FALSE),
+            scanner.TokenType.TRUE => self.emitOP(OP.TRUE),
+            scanner.TokenType.NIL => self.emitOP(OP.NIL),
             else => unreachable,
         }
     }
@@ -288,16 +289,16 @@ pub const Compiler = struct {
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
         switch (operatorType) {
-            scanner.TokenType.PLUS => self.emitOP(chunk.OP.ADD),
-            scanner.TokenType.MINUS => self.emitOP(chunk.OP.SUBTRACT),
-            scanner.TokenType.STAR => self.emitOP(chunk.OP.MULTIPLY),
-            scanner.TokenType.SLASH => self.emitOP(chunk.OP.DIVIDE),
-            scanner.TokenType.BANG_EQUAL => self.emit2OP(chunk.OP.EQUAL, chunk.OP.NOT),
-            scanner.TokenType.EQUAL_EQUAL => self.emitOP(chunk.OP.EQUAL),
-            scanner.TokenType.GREATER => self.emitOP(chunk.OP.GREATER),
-            scanner.TokenType.GREATER_EQUAL => self.emit2OP(chunk.OP.LESS, chunk.OP.NOT),
-            scanner.TokenType.LESS => self.emitOP(chunk.OP.LESS),
-            scanner.TokenType.LESS_EQUAL => self.emit2OP(chunk.OP.GREATER, chunk.OP.NOT),
+            scanner.TokenType.PLUS => self.emitOP(OP.ADD),
+            scanner.TokenType.MINUS => self.emitOP(OP.SUBTRACT),
+            scanner.TokenType.STAR => self.emitOP(OP.MULTIPLY),
+            scanner.TokenType.SLASH => self.emitOP(OP.DIVIDE),
+            scanner.TokenType.BANG_EQUAL => self.emit2OP(OP.EQUAL, OP.NOT),
+            scanner.TokenType.EQUAL_EQUAL => self.emitOP(OP.EQUAL),
+            scanner.TokenType.GREATER => self.emitOP(OP.GREATER),
+            scanner.TokenType.GREATER_EQUAL => self.emit2OP(OP.LESS, OP.NOT),
+            scanner.TokenType.LESS => self.emitOP(OP.LESS),
+            scanner.TokenType.LESS_EQUAL => self.emit2OP(OP.GREATER, OP.NOT),
             else => unreachable,
         }
     }
@@ -315,13 +316,15 @@ pub const Compiler = struct {
         // emit bytecode
     }
 
-    pub fn compile(source: []const u8, ch: *chunk.Chunk, allocator: std.mem.Allocator) CompilerError!void {
-        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = ch, .allocator = allocator };
+    pub fn compile(source: []const u8, allocator: std.mem.Allocator) CompilerError!Chunk {
+        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = try Chunk.init(allocator), .allocator = allocator };
+        errdefer self.compilingChunk.deinit();
+
         self.advance();
         self.expression();
         self.consume(scanner.TokenType.EOF, "Expected end of expression.");
         self.endCompiler();
 
-        if (self.hadError) return self.lastError;
+        return if (self.hadError) self.lastError else self.compilingChunk;
     }
 };
