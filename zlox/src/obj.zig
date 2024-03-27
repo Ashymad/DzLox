@@ -1,51 +1,61 @@
 const std = @import("std");
+const utils = @import("comptime_utils.zig");
 
 pub const Obj = packed struct {
-    const Self = @This();
+    const Super = @This();
     pub const Error = error{IllegalCastError};
 
     type: Type,
-    next: ?*Self = null,
+    next: ?*Super = null,
 
-    pub const String = struct {
-        obj: Self,
+    pub const List = struct {};
+
+    pub const String = packed struct {
+        const Self = @This();
+        const Arg = []const u8;
+
+        obj: Super,
         len: usize,
-        fn ptr(self: *const @This()) []align(@alignOf(@This())) const u8 {
-            const p: [*]align(@alignOf(@This())) const u8 = @ptrCast(self);
-            return p[0 .. @sizeOf(@This()) + self.len];
-        }
 
-        fn data(self: *@This()) [*]u8 {
-            const p: [*]u8 = @ptrCast(self);
-            return p + @sizeOf(@This());
+        fn data(self: anytype) utils.copy_const(@TypeOf(self), [*]u8) {
+            const p: utils.copy_const(@TypeOf(self), [*]u8) = @ptrCast(self);
+            return p + @sizeOf(Self);
         }
-        fn cdata(self: *const @This()) [*]const u8 {
-            const p: [*]const u8 = @ptrCast(self);
-            return p + @sizeOf(@This());
-        }
-        fn new(len: usize, allocator: std.mem.Allocator) !*@This() {
-            const ret: *@This() = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(@This()), @sizeOf(@This()) + len));
-            ret.* = @This(){ .obj = Self{
-                .type = Self.Type.String,
+        fn new(len: usize, allocator: std.mem.Allocator) !*Self {
+            const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(Self), @sizeOf(Self) + len));
+            ret.* = Self{ .obj = Super{
+                .type = Super.Type.String,
             }, .len = len };
             return ret;
         }
-        pub fn slice(self: *const @This()) []const u8 {
-            return self.cdata()[0..self.len];
+
+        pub fn slice(self: *const Self) []const u8 {
+            return self.data()[0..self.len];
         }
-        pub fn init(string: []const u8, allocator: std.mem.Allocator) !*@This() {
-            const ret = try new(string.len, allocator);
-            @memcpy(ret.data(), string);
-            return ret;
-        }
-        pub fn cat(self: *const @This(), other: *const @This(), allocator: std.mem.Allocator) !*@This() {
+        pub fn cat(self: *const Self, other: *const Self, allocator: std.mem.Allocator) !*Self {
             const ret = try new(self.len + other.len, allocator);
             @memcpy(ret.data(), self.slice());
             @memcpy(ret.data() + self.len, other.slice());
             return ret;
         }
-        pub fn cast(self: *@This()) *Self {
+
+        pub fn cast(self: *Self) *Super {
             return @ptrCast(self);
+        }
+        pub fn print(self: *const Self) void {
+            std.debug.print("\"{s}\"", .{self.slice()});
+        }
+        pub fn eql(self: *const Self, other: *const Self) bool {
+            return std.mem.eql(u8, self.slice(), other.slice());
+        }
+        pub fn init(string: Arg, allocator: std.mem.Allocator) !*Self {
+            const ret = try new(string.len, allocator);
+            @memcpy(ret.data(), string);
+            return ret;
+        }
+        fn free(self: *const Self, allocator: std.mem.Allocator) void {
+            const p: [*]align(@alignOf(Self)) const u8 = @ptrCast(self);
+            allocator.free(p[0 .. @sizeOf(Self) + self.len]);
         }
     };
 
@@ -53,39 +63,40 @@ pub const Obj = packed struct {
         String,
 
         pub fn get(comptime self: @This()) type {
-            return @field(Obj, @tagName(self));
+            return @field(Super, @tagName(self));
         }
     };
 
-    pub fn free(obj: *Self, allocator: std.mem.Allocator) void {
+    pub fn init(comptime tp: Type, arg: tp.get().Arg, allocator: std.mem.Allocator) !*Super {
+        return (try tp.get().init(arg, allocator)).cast();
+    }
+    pub fn print(self: *const Super) void {
+        switch (self.type) {
+            inline else => |tp| self._cast(tp).print(),
+        }
+    }
+    pub fn eql(self: *const Super, other: *const Super) bool {
+        if (!self.is(other.type)) return false;
+        return switch (self.type) {
+            inline else => |tp| self._cast(tp).eql(other._cast(tp)),
+        };
+    }
+    pub fn free(obj: *Super, allocator: std.mem.Allocator) void {
         return switch (obj.type) {
-            .String => allocator.free(obj._cast(.String).ptr()),
+            inline else => |tp| obj._cast(tp).free(allocator),
         };
     }
 
-    pub fn is(self: *const Self, tp: Type) bool {
+    pub fn is(self: *const Super, tp: Type) bool {
         return self.type == tp;
     }
 
-    pub fn print(self: *const Self) void {
-        switch (self.type) {
-            .String => std.debug.print("\"{s}\"", .{self._cast(.String).slice()}),
-        }
-    }
-
-    pub fn equal(self: *const Self, other: *const Self) bool {
-        if (!self.is(other.type)) return false;
-        return switch (self.type) {
-            .String => std.mem.eql(u8, self._cast(.String).slice(), other._cast(.String).slice()),
-        };
-    }
-
-    fn _cast(self: *const Self, comptime tp: Type) *const tp.get() {
-        return @ptrCast(@alignCast(self));
-    }
-
-    pub fn cast(self: *const Self, comptime tp: Type) Error!*const tp.get() {
+    pub fn cast(self: *const Super, comptime tp: Type) Error!*const tp.get() {
         if (!self.is(tp)) return Error.IllegalCastError;
         return self._cast(tp);
+    }
+
+    fn _cast(self: *const Super, comptime tp: Type) *const tp.get() {
+        return @ptrCast(@alignCast(self));
     }
 };

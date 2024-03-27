@@ -19,6 +19,15 @@ pub const Value = union(enum) {
         }
     }
 
+    pub fn init(val: anytype) @This() {
+        inline for (@typeInfo(@This()).Union.fields) |field| {
+            if (@TypeOf(val) == field.type) {
+                return @unionInit(@This(), field.name, val);
+            }
+        }
+        @compileError("Invalid union type");
+    }
+
     fn toTag(comptime from: anytype) Tag {
         return if (@TypeOf(from) == Obj.Type)
             .obj
@@ -31,10 +40,6 @@ pub const Value = union(enum) {
             toTag(tag) => @TypeOf(tag) == Tag or self.obj.is(tag),
             else => false,
         };
-    }
-
-    pub fn new(comptime tag: anytype, value: tagType(tag)) @This() {
-        return @unionInit(@This(), @tagName(toTag(tag)), value);
     }
 
     pub fn get(self: @This(), comptime tag: anytype) tagType(tag) {
@@ -63,13 +68,13 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn equal(self: @This(), other: @This()) bool {
+    pub fn eql(self: @This(), other: @This()) bool {
         if (@intFromEnum(self) != @intFromEnum(other)) return false;
         return switch (self) {
             .number => |x| x == other.number,
             .bool => |x| x == other.bool,
             .nil => true,
-            .obj => |x| x.equal(other.obj),
+            .obj => |x| x.eql(other.obj),
         };
     }
 };

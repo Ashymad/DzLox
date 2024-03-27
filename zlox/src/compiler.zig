@@ -238,12 +238,11 @@ pub const Compiler = struct {
     }
 
     fn string(self: *@This()) void {
-        const ret = Obj.String.init(self.previous.lexeme[1 .. self.previous.lexeme.len - 1], self.allocator) catch |err| {
+        self.emitConstant(Value.init(Obj.init(.String, self.previous.lexeme[1 .. self.previous.lexeme.len - 1], self.allocator) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Couldn't allocate object");
             return;
-        };
-        self.emitConstant(Value{ .obj = ret.cast() });
+        }));
     }
 
     fn emitConstant(self: *@This(), val: Value) void {

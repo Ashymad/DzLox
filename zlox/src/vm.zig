@@ -76,7 +76,7 @@ pub const VM = struct {
         const b = self.pop();
         const a = self.pop();
         if (a.is(in_tag) and b.is(in_tag)) {
-            self.push(Value.new(out_tag, try op.call(a.get(in_tag), b.get(in_tag))));
+            self.push(Value.init(try op.call(a.get(in_tag), b.get(in_tag))));
         } else {
             self.runtimeError("Operands have invalid types, expected: {s}", .{@tagName(in_tag)});
             return InterpreterError.RuntimeError;
@@ -116,7 +116,7 @@ pub const VM = struct {
                         self.runtimeError("Operand must be a number.", .{});
                         return InterpreterError.RuntimeError;
                     }
-                    self.push(Value{ .number = -self.pop().number });
+                    self.push(Value.init(-self.pop().number));
                 },
                 @intFromEnum(OP.ADD) => {
                     if (self.peek(0).is(Obj.Type.String)) {
@@ -129,13 +129,13 @@ pub const VM = struct {
                 @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
                 @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, Callback.mul),
                 @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, Callback.div),
-                @intFromEnum(OP.TRUE) => self.push(Value{ .bool = true }),
-                @intFromEnum(OP.FALSE) => self.push(Value{ .bool = false }),
-                @intFromEnum(OP.EQUAL) => self.push(Value{ .bool = self.pop().equal(self.pop()) }),
+                @intFromEnum(OP.TRUE) => self.push(Value.init(true)),
+                @intFromEnum(OP.FALSE) => self.push(Value.init(false)),
+                @intFromEnum(OP.EQUAL) => self.push(Value.init(self.pop().eql(self.pop()))),
                 @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, Callback.less),
                 @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, Callback.more),
-                @intFromEnum(OP.NIL) => self.push(Value{ .nil = undefined }),
-                @intFromEnum(OP.NOT) => self.push(Value{ .bool = !self.pop().isTruthy() }),
+                @intFromEnum(OP.NIL) => self.push(Value.init({})),
+                @intFromEnum(OP.NOT) => self.push(Value.init(!self.pop().isTruthy())),
                 else => return InterpreterError.CompileError,
             }
         }
