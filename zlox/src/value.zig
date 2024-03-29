@@ -25,7 +25,7 @@ pub const Value = union(enum) {
                 return @unionInit(@This(), field.name, val);
             }
         }
-        @compileError("Invalid union type");
+        @compileError("Invalid Value type");
     }
 
     fn toTag(comptime from: anytype) Tag {

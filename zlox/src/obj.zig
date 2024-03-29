@@ -1,5 +1,6 @@
 const std = @import("std");
 const utils = @import("comptime_utils.zig");
+const hash = @import("hash.zig").hash;
 
 pub const Obj = packed struct {
     const Super = @This();
@@ -7,6 +8,7 @@ pub const Obj = packed struct {
 
     type: Type,
     next: ?*Super = null,
+    hash: u32,
 
     pub const List = struct {};
 
@@ -25,17 +27,22 @@ pub const Obj = packed struct {
             const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(Self), @sizeOf(Self) + len));
             ret.* = Self{ .obj = Super{
                 .type = Super.Type.String,
+                .hash = 0,
             }, .len = len };
             return ret;
+        }
+        fn rehash(self: *Self) void {
+            self.obj.hash = hash(self.slice());
         }
 
         pub fn slice(self: *const Self) []const u8 {
             return self.data()[0..self.len];
         }
         pub fn cat(self: *const Self, other: *const Self, allocator: std.mem.Allocator) !*Self {
-            const ret = try new(self.len + other.len, allocator);
+            var ret = try new(self.len + other.len, allocator);
             @memcpy(ret.data(), self.slice());
             @memcpy(ret.data() + self.len, other.slice());
+            ret.rehash();
             return ret;
         }
 
@@ -46,11 +53,12 @@ pub const Obj = packed struct {
             std.debug.print("\"{s}\"", .{self.slice()});
         }
         pub fn eql(self: *const Self, other: *const Self) bool {
-            return std.mem.eql(u8, self.slice(), other.slice());
+            return @intFromPtr(self) == @intFromPtr(other);
         }
         pub fn init(string: Arg, allocator: std.mem.Allocator) !*Self {
-            const ret = try new(string.len, allocator);
+            var ret = try new(string.len, allocator);
             @memcpy(ret.data(), string);
+            ret.rehash();
             return ret;
         }
         fn free(self: *const Self, allocator: std.mem.Allocator) void {
