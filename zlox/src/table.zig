@@ -50,15 +50,17 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             self.allocator.free(self.entries);
             self.entries = entries;
         }
-        const find_check = struct {
+        pub fn find_check(key: K) struct {
             k: K,
             pub fn check(self: *const @This(), k2: K) bool {
                 return cmp_fn(self.k, k2);
             }
-        };
+        } {
+            return @TypeOf(find_check(key)){ .k = key };
+        }
 
         pub fn find(entries: []Entry, key: K) *Entry {
-            return find_(entries, hash_fn(key), find_check{ .k = key });
+            return find_(entries, hash_fn(key), find_check(key));
         }
 
         pub fn find_(entries: []Entry, hash: u32, check: anytype) *Entry {

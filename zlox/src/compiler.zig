@@ -248,7 +248,7 @@ pub const Compiler = struct {
     }
 
     fn string(self: *@This()) void {
-        self.emitConstant(Value.init(self.objects.emplace(.String, &[_][]const u8{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
+        self.emitConstant(Value.init(self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Couldn't allocate object");
             return;
