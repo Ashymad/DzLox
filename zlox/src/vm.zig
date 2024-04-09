@@ -12,6 +12,7 @@ pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ 
 pub const VM = struct {
     ip: [*]const u8,
     chunk: *Chunk,
+    objects: *Obj.List,
     stack: stackType,
     stackTop: [*]Value,
 
@@ -22,25 +23,27 @@ pub const VM = struct {
         var ret = @This(){
             .ip = undefined,
             .chunk = undefined,
-            .stack = [_]Value{Value{ .number = 0 }} ** stackSize,
+            .objects = undefined,
+            .stack = [_]Value{Value.init({})} ** stackSize,
             .stackTop = undefined,
         };
         ret.stackTop = &ret.stack;
         return ret;
     }
 
-    pub fn interpretChunk(self: *@This(), chunk: *Chunk, allocator: std.mem.Allocator) InterpreterError!void {
+    pub fn interpretChunk(self: *@This(), chunk: *Chunk) InterpreterError!void {
         self.resetStack();
         self.chunk = chunk;
         self.ip = chunk.code.data.ptr;
-        try self.run(true, allocator);
+        try self.run(true);
     }
 
     pub fn interpret(self: *@This(), source: []const u8, allocator: std.mem.Allocator) InterpreterError!void {
-        var chunk = try compiler.Compiler.compile(source, allocator);
-        defer chunk.deinit();
+        var result = try compiler.Compiler.compile(source, allocator);
+        defer result.deinit();
+        self.objects = &result.objects;
 
-        try self.interpretChunk(&chunk, allocator);
+        try self.interpretChunk(&result.chunk);
         self.resetStack();
     }
 
@@ -87,7 +90,7 @@ pub const VM = struct {
         return @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr);
     }
 
-    fn run(self: *@This(), comptime dbg: bool, allocator: std.mem.Allocator) !void {
+    fn run(self: *@This(), comptime dbg: bool) !void {
         while (true) {
             if (dbg) {
                 std.debug.print("          ", .{});
@@ -120,8 +123,7 @@ pub const VM = struct {
                 },
                 @intFromEnum(OP.ADD) => {
                     if (self.peek(0).is(Obj.Type.String)) {
-                        try self.binary_op(Obj.Type.String, Obj.Type.String, Callback.concatenate(allocator));
-                        self.chunk.addObject(self.peek(0));
+                        try self.binary_op(Obj.Type.String, Obj.Type.String, Callback.concatenate(self.objects));
                     } else {
                         try self.binary_op(Value.number, Value.number, Callback.add);
                     }

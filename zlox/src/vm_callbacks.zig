@@ -5,12 +5,12 @@ const Obj = @import("obj.zig").Obj;
 const Number = Value.tagType(.number);
 const Bool = Value.tagType(.bool);
 
-pub const Error = error{OutOfMemory};
+pub const Error = Obj.Error;
 
 pub fn Type(comptime in_tag: anytype, comptime out_tag: anytype) type {
     if (@TypeOf(in_tag) == Obj.Type) {
         return struct {
-            allocator: std.mem.Allocator,
+            objects: *Obj.List,
             _call: *const fn (self: *const @This(), Value.tagType(in_tag), Value.tagType(in_tag)) Error!Value.tagType(out_tag),
             pub fn call(self: *const @This(), a: Value.tagType(in_tag), b: Value.tagType(in_tag)) Error!Value.tagType(out_tag) {
                 return self._call(self, a, b);
@@ -23,11 +23,11 @@ pub fn Type(comptime in_tag: anytype, comptime out_tag: anytype) type {
     }
 }
 
-pub fn concatenate(allocator: std.mem.Allocator) Type(Obj.Type.String, Obj.Type.String) {
+pub fn concatenate(objects: *Obj.List) Type(Obj.Type.String, Obj.Type.String) {
     const Ret = Type(Obj.Type.String, Obj.Type.String);
-    const ret = Ret{ .allocator = allocator, ._call = struct {
+    const ret = Ret{ .objects = objects, ._call = struct {
         pub fn concatenate(self: *const Ret, lhs: *Obj, rhs: *Obj) Error!*Obj {
-            return (try (lhs.cast(.String) catch unreachable).cat(rhs.cast(.String) catch unreachable, self.allocator)).cast();
+            return try self.objects.emplace(.String, &[_][]const u8{ (lhs.cast(.String) catch unreachable).slice(), (rhs.cast(.String) catch unreachable).slice() });
         }
     }.concatenate };
     return ret;

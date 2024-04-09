@@ -29,8 +29,6 @@ pub const Chunk = struct {
             .code = try array.Array(u8, usize, 8).init(allocator),
             .constants = try ValueArray.init(allocator),
             .lines = try array.RLEArray(i32, 8).init(allocator),
-            .allocator = allocator,
-            .objects = null,
         };
     }
 
@@ -45,30 +43,15 @@ pub const Chunk = struct {
 
     pub fn addConstant(self: *@This(), val: value.Value) Error!u8 {
         try self.constants.add(val);
-        self.addObject(val);
         return self.constants.len - 1;
-    }
-
-    pub fn addObject(self: *@This(), val: value.Value) void {
-        if (val.is(value.Value.obj)) {
-            val.obj.next = self.objects;
-            self.objects = val.obj;
-        }
     }
 
     pub fn deinit(self: *@This()) void {
         self.constants.deinit();
         self.lines.deinit();
         self.code.deinit();
-
-        while (self.objects) |obj| {
-            self.objects = obj.next;
-            obj.free(self.allocator);
-        }
     }
 
-    objects: ?*Obj,
-    allocator: std.mem.Allocator,
     code: array.Array(u8, usize, 8),
     constants: ValueArray,
     lines: array.RLEArray(i32, 8),

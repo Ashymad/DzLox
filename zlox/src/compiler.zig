@@ -6,7 +6,7 @@ const Value = @import("value.zig").Value;
 const Obj = @import("obj.zig").Obj;
 const debug = @import("debug.zig");
 
-pub const CompilerError = scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
+pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
 const Precedence = enum {
     NONE,
@@ -40,6 +40,16 @@ pub const Compiler = struct {
     panicMode: bool,
     compilingChunk: Chunk,
     allocator: std.mem.Allocator,
+    objects: Obj.List,
+
+    pub const Result = struct {
+        chunk: Chunk,
+        objects: Obj.List,
+        pub fn deinit(self: *@This()) void {
+            self.objects.deinit();
+            self.chunk.deinit();
+        }
+    };
 
     const ParseFn = *const fn (*@This()) void;
 
@@ -238,7 +248,7 @@ pub const Compiler = struct {
     }
 
     fn string(self: *@This()) void {
-        self.emitConstant(Value.init(Obj.init(.String, self.previous.lexeme[1 .. self.previous.lexeme.len - 1], self.allocator) catch |err| {
+        self.emitConstant(Value.init(self.objects.emplace(.String, &[_][]const u8{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Couldn't allocate object");
             return;
@@ -315,15 +325,16 @@ pub const Compiler = struct {
         // emit bytecode
     }
 
-    pub fn compile(source: []const u8, allocator: std.mem.Allocator) CompilerError!Chunk {
-        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = try Chunk.init(allocator), .allocator = allocator };
+    pub fn compile(source: []const u8, allocator: std.mem.Allocator) CompilerError!Result {
+        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = try Chunk.init(allocator), .allocator = allocator, .objects = Obj.List.init(allocator) };
         errdefer self.compilingChunk.deinit();
+        errdefer self.objects.deinit();
 
         self.advance();
         self.expression();
         self.consume(scanner.TokenType.EOF, "Expected end of expression.");
         self.endCompiler();
 
-        return if (self.hadError) self.lastError else self.compilingChunk;
+        return if (self.hadError) self.lastError else Result{ .chunk = self.compilingChunk, .objects = self.objects };
     }
 };

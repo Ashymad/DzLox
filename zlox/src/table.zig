@@ -5,9 +5,9 @@ pub const TableError = error{ OutOfMemory, KeyError };
 pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type {
     return struct {
         const Self = @This();
-        const MaxLoad = 0.75;
+        const MaxLoad: f32 = 0.75;
 
-        const Entry = union(enum) {
+        pub const Entry = union(enum) {
             const Some = struct {
                 key: K,
                 value: V,
@@ -34,14 +34,14 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
 
         fn adjustCapacity(self: *Self, newsize: usize) TableError!void {
             const entries = try self.allocator.alloc(Entry, newsize);
-            for (entries) |entry| {
-                entry = .none;
+            for (entries) |*entry| {
+                entry.* = .none;
             }
             self.count = 0;
             for (self.entries) |entry| {
                 switch (entry) {
                     .some => |some| {
-                        (find(entries, some.key)) = entry;
+                        find(entries, some.key).* = entry;
                         self.count += 1;
                     },
                     else => {},
@@ -50,17 +50,27 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             self.allocator.free(self.entries);
             self.entries = entries;
         }
+        const find_check = struct {
+            k: K,
+            pub fn check(self: *const @This(), k2: K) bool {
+                return cmp_fn(self.k, k2);
+            }
+        };
 
-        fn find(entries: []Entry, key: K) *Entry {
-            const idx = hash_fn(key) % entries.len;
+        pub fn find(entries: []Entry, key: K) *Entry {
+            return find_(entries, hash_fn(key), find_check{ .k = key });
+        }
+
+        pub fn find_(entries: []Entry, hash: u32, check: anytype) *Entry {
+            var idx = hash % entries.len;
             var tomb: ?*Entry = null;
 
             while (true) {
                 const entry = &entries[idx];
-                switch (entry) {
-                    .some => |some| if (cmp_fn(some.key, key)) return entry,
-                    .tomb => tomb = if (tomb) |_| tomb else entry,
-                    .none => return if (tomb) |_| tomb else entry,
+                switch (entry.*) {
+                    .some => |some| if (check.check(some.key)) return entry,
+                    .tomb => tomb = if (tomb) |t| t else entry,
+                    .none => return if (tomb) |t| t else entry,
                 }
                 idx = (idx + 1) % entries.len;
             }
@@ -75,19 +85,31 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             }
         }
 
-        pub fn set(self: *Self, key: K, val: V) TableError!bool {
-            if (self.count + 1 > self.entries.len * MaxLoad) {
-                try self.adjustCapacity(self.growCapacity());
-            }
-            var entry = find(self.entries, key);
-            const isNewKey = switch (entry) {
-                .none => self.count += 1 or true,
+        pub fn set_(self: *Self, entry: *Entry, key: K, val: V) bool {
+            const isNewKey = switch (entry.*) {
+                .none => blk: {
+                    self.count += 1;
+                    break :blk true;
+                },
                 .tomb => true,
                 .some => false,
             };
 
-            entry.some = Entry.Some{ .key = key, .value = val };
+            entry.* = Entry{ .some = Entry.Some{ .key = key, .value = val } };
             return isNewKey;
+        }
+
+        pub fn checkCapacity(self: *Self) TableError!void {
+            const len: f32 = @floatFromInt(self.entries.len);
+            const count: f32 = @floatFromInt(self.count);
+            if (count + 1.0 > len * MaxLoad) {
+                try self.adjustCapacity(self.growCapacity());
+            }
+        }
+
+        pub fn set(self: *Self, key: K, val: V) TableError!bool {
+            try self.checkCapacity();
+            return set_(find(self.entries, key), key, val);
         }
 
         pub fn get(self: *const Self, key: K) TableError!V {
