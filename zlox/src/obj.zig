@@ -152,7 +152,7 @@ pub const Obj = packed struct {
         }
     };
 
-    pub const Type = enum {
+    pub const Type = enum(u8) {
         String,
 
         pub fn get(comptime self: @This()) type {

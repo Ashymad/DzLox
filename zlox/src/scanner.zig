@@ -1,5 +1,4 @@
 const std = @import("std");
-const trie = @import("trie.zig");
 
 pub const TokenType = enum {
     LEFT_PAREN,
@@ -70,7 +69,7 @@ pub const Token = struct {
 };
 
 pub const Scanner = struct {
-    const identifiers = trie.LowercaseTrieTable(TokenType, .{
+    const identifiers = std.ComptimeStringMap(TokenType, .{
         .{ "and", TokenType.AND },
         .{ "class", TokenType.CLASS },
         .{ "else", TokenType.ELSE },
