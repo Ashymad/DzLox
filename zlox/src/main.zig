@@ -35,14 +35,14 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
 }
 
 pub fn repl(allocator: std.mem.Allocator) anyerror!void {
-    var VM = vm.VM.init();
+    var VM = vm.VM.init(allocator);
     defer VM.deinit();
 
     _ = Linenoise.linenoiseHistorySetMaxLen(100);
 
     while (Linenoise.linenoise("lox> ")) |line| {
         defer Linenoise.linenoiseFree(line);
-        VM.interpret(std.mem.span(line), allocator) catch |err| {
+        VM.interpret(std.mem.span(line)) catch |err| {
             std.debug.print("Error: {}\n", .{err});
         };
         _ = Linenoise.linenoiseHistoryAdd(line);

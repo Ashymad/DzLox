@@ -19,6 +19,9 @@ pub const OP = enum(u8) {
     MULTIPLY,
     DIVIDE,
     NOT,
+    PRINT,
+    POP,
+    DEFINE_GLOBAL,
 };
 
 pub const Chunk = struct {

@@ -5,6 +5,7 @@ const OP = @import("chunk.zig").OP;
 const Value = @import("value.zig").Value;
 const Obj = @import("obj.zig").Obj;
 const debug = @import("debug.zig");
+const Token = scanner.TokenType;
 
 pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
@@ -40,18 +41,11 @@ pub const Compiler = struct {
     panicMode: bool,
     compilingChunk: Chunk,
     allocator: std.mem.Allocator,
-    objects: Obj.List,
+    objects: *Obj.List,
 
-    pub const Result = struct {
-        chunk: Chunk,
-        objects: Obj.List,
-        pub fn deinit(self: *@This()) void {
-            self.objects.deinit();
-            self.chunk.deinit();
-        }
-    };
+    const Self = @This();
 
-    const ParseFn = *const fn (*@This()) void;
+    const ParseFn = *const fn (*Self) void;
 
     const ParseRule = struct {
         prefix: ?ParseFn,
@@ -63,13 +57,13 @@ pub const Compiler = struct {
     };
 
     const rules = init: {
-        var new: [@typeInfo(scanner.TokenType).Enum.fields.len]ParseRule = undefined;
+        var new: [@typeInfo(Token).Enum.fields.len]ParseRule = undefined;
         for (&new, 0..) |*v, i| {
-            const T = scanner.TokenType;
-            const S = @This();
+            const T = Token;
+            const S = Self;
             const R = ParseRule.init;
             const P = Precedence;
-            const tok: T = @enumFromInt(i);
+            const tok: Token = @enumFromInt(i);
             v.* = switch (tok) {
                 // zig fmt: off
                 T.LEFT_PAREN    => R(S.grouping, null,      P.NONE ),
@@ -119,11 +113,11 @@ pub const Compiler = struct {
         break :init new;
     };
 
-    fn getRule(tok: scanner.TokenType) *const ParseRule {
+    fn getRule(tok: Token) *const ParseRule {
         return &Compiler.rules[@intFromEnum(tok)];
     }
 
-    fn advance(self: *@This()) void {
+    fn advance(self: *Self) void {
         self.previous = self.current;
 
         while (true) {
@@ -138,60 +132,55 @@ pub const Compiler = struct {
         }
     }
 
-    fn currentChunk(self: *@This()) *Chunk {
+    fn currentChunk(self: *Self) *Chunk {
         return &self.compilingChunk;
     }
 
-    fn emitByte(self: *@This(), byte: u8) void {
+    fn emitByte(self: *Self, byte: u8) void {
         self.currentChunk().write(byte, self.previous.line) catch |err| {
             self.lastError = err;
             self.errorAtCurrent("Out of Memory");
         };
     }
 
-    fn emitOP(self: *@This(), op: OP) void {
+    fn emitOP(self: *Self, op: OP) void {
         self.currentChunk().writeOP(op, self.previous.line) catch |err| {
             self.lastError = err;
             self.errorAtCurrent("Out of Memory");
         };
     }
 
-    fn emit(self: *@This(), op: OP, byte: u8) void {
+    fn emit(self: *Self, op: OP, byte: u8) void {
         self.emitOP(op);
         self.emitByte(byte);
     }
 
-    fn emit2OP(self: *@This(), op: OP, op2: OP) void {
+    fn emit2OP(self: *Self, op: OP, op2: OP) void {
         self.emitOP(op);
         self.emitOP(op2);
     }
 
-    fn endCompiler(self: *@This()) void {
+    fn endCompiler(self: *Self) void {
         self.emitReturn();
-        if (!self.hadError) {
-            debug.disassembleChunk(self.currentChunk().*, "code") catch {
-                std.debug.print("Unable to disassemble chunk\n", .{});
-            };
-        }
     }
 
-    fn emitReturn(self: *@This()) void {
+    fn emitReturn(self: *Self) void {
         self.emitOP(OP.RETURN);
     }
 
-    fn errorAtCurrent(self: *@This(), message: []const u8) void {
+    fn errorAtCurrent(self: *Self, message: []const u8) void {
         self.errorAt(self.current, message);
     }
 
-    fn errorAtPrevious(self: *@This(), message: []const u8) void {
+    fn errorAtPrevious(self: *Self, message: []const u8) void {
         self.errorAt(self.previous, message);
     }
 
-    fn expression(self: *@This()) void {
+    fn expression(self: *Self) void {
         self.parsePrecedence(Precedence.ASSIGNMENT);
     }
 
-    fn parsePrecedence(self: *@This(), precedence: Precedence) void {
+    fn parsePrecedence(self: *Self, precedence: Precedence) void {
         self.advance();
         if (getRule(self.previous.type catch unreachable).prefix) |prefixRule| {
             prefixRule(self);
@@ -213,12 +202,12 @@ pub const Compiler = struct {
         }
     }
 
-    fn errorAt(self: *@This(), token: scanner.Token, message: []const u8) void {
+    fn errorAt(self: *Self, token: scanner.Token, message: []const u8) void {
         if (self.panicMode) return;
         self.panicMode = true;
         std.debug.print("[{d}:{d}] Error", .{ token.line, token.column });
         if (token.type) |tpe| {
-            if (tpe == scanner.TokenType.EOF) {
+            if (tpe == Token.EOF) {
                 std.debug.print(" at end", .{});
             } else {
                 std.debug.print(" at {s}", .{token.lexeme});
@@ -228,7 +217,7 @@ pub const Compiler = struct {
         self.hadError = true;
     }
 
-    fn consume(self: *@This(), tok: scanner.TokenType, message: []const u8) void {
+    fn consume(self: *Self, tok: Token, message: []const u8) void {
         if (self.current.type) |tpe| {
             if (tpe == tok) {
                 self.advance();
@@ -239,7 +228,7 @@ pub const Compiler = struct {
         self.errorAtCurrent(message);
     }
 
-    fn number(self: *@This()) void {
+    fn number(self: *Self) void {
         self.emitConstant(Value.parseNumber(self.previous.lexeme) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Invalid numeric literal");
@@ -247,7 +236,7 @@ pub const Compiler = struct {
         });
     }
 
-    fn string(self: *@This()) void {
+    fn string(self: *Self) void {
         self.emitConstant(Value.init(self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Couldn't allocate object");
@@ -255,11 +244,11 @@ pub const Compiler = struct {
         }));
     }
 
-    fn emitConstant(self: *@This(), val: Value) void {
+    fn emitConstant(self: *Self, val: Value) void {
         self.emit(OP.CONSTANT, self.makeConstant(val));
     }
 
-    fn makeConstant(self: *@This(), val: Value) u8 {
+    fn makeConstant(self: *Self, val: Value) u8 {
         return self.currentChunk().addConstant(val) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Too many constants in one chunk");
@@ -267,74 +256,169 @@ pub const Compiler = struct {
         };
     }
 
-    fn grouping(self: *@This()) void {
+    fn grouping(self: *Self) void {
         self.expression();
-        self.consume(scanner.TokenType.RIGHT_PAREN, "Expected ')' after expression");
+        self.consume(Token.RIGHT_PAREN, "Expected ')' after expression");
     }
 
-    fn unary(self: *@This()) void {
+    fn unary(self: *Self) void {
         const operatorType = self.previous.type catch unreachable;
 
         self.parsePrecedence(Precedence.UNARY);
 
         switch (operatorType) {
-            scanner.TokenType.MINUS => self.emitOP(OP.NEGATE),
-            scanner.TokenType.BANG => self.emitOP(OP.NOT),
+            Token.MINUS => self.emitOP(OP.NEGATE),
+            Token.BANG => self.emitOP(OP.NOT),
             else => unreachable,
         }
     }
 
-    fn literal(self: *@This()) void {
+    fn literal(self: *Self) void {
         switch (self.previous.type catch unreachable) {
-            scanner.TokenType.FALSE => self.emitOP(OP.FALSE),
-            scanner.TokenType.TRUE => self.emitOP(OP.TRUE),
-            scanner.TokenType.NIL => self.emitOP(OP.NIL),
+            Token.FALSE => self.emitOP(OP.FALSE),
+            Token.TRUE => self.emitOP(OP.TRUE),
+            Token.NIL => self.emitOP(OP.NIL),
             else => unreachable,
         }
     }
 
-    fn binary(self: *@This()) void {
+    fn binary(self: *Self) void {
         const operatorType = self.previous.type catch unreachable;
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
         switch (operatorType) {
-            scanner.TokenType.PLUS => self.emitOP(OP.ADD),
-            scanner.TokenType.MINUS => self.emitOP(OP.SUBTRACT),
-            scanner.TokenType.STAR => self.emitOP(OP.MULTIPLY),
-            scanner.TokenType.SLASH => self.emitOP(OP.DIVIDE),
-            scanner.TokenType.BANG_EQUAL => self.emit2OP(OP.EQUAL, OP.NOT),
-            scanner.TokenType.EQUAL_EQUAL => self.emitOP(OP.EQUAL),
-            scanner.TokenType.GREATER => self.emitOP(OP.GREATER),
-            scanner.TokenType.GREATER_EQUAL => self.emit2OP(OP.LESS, OP.NOT),
-            scanner.TokenType.LESS => self.emitOP(OP.LESS),
-            scanner.TokenType.LESS_EQUAL => self.emit2OP(OP.GREATER, OP.NOT),
+            Token.PLUS => self.emitOP(OP.ADD),
+            Token.MINUS => self.emitOP(OP.SUBTRACT),
+            Token.STAR => self.emitOP(OP.MULTIPLY),
+            Token.SLASH => self.emitOP(OP.DIVIDE),
+            Token.BANG_EQUAL => self.emit2OP(OP.EQUAL, OP.NOT),
+            Token.EQUAL_EQUAL => self.emitOP(OP.EQUAL),
+            Token.GREATER => self.emitOP(OP.GREATER),
+            Token.GREATER_EQUAL => self.emit2OP(OP.LESS, OP.NOT),
+            Token.LESS => self.emitOP(OP.LESS),
+            Token.LESS_EQUAL => self.emit2OP(OP.GREATER, OP.NOT),
             else => unreachable,
         }
     }
 
-    fn ternary(self: *@This()) void {
+    fn ternary(self: *Self) void {
         const operatorType = self.previous.type catch unreachable;
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
         // emit bytecode
 
-        self.consume(scanner.TokenType.COLON, "Expected ':' in ternary expression.");
+        self.consume(Token.COLON, "Expected ':' in ternary expression.");
 
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
         // emit bytecode
     }
 
-    pub fn compile(source: []const u8, allocator: std.mem.Allocator) CompilerError!Result {
-        var self = @This(){ .scanner = try scanner.Scanner.init(source), .current = scanner.Token.Empty, .previous = scanner.Token.Empty, .panicMode = false, .hadError = false, .lastError = scanner.ScannerError.EmptyToken, .compilingChunk = try Chunk.init(allocator), .allocator = allocator, .objects = Obj.List.init(allocator) };
+    fn declaration(self: *Self) void {
+        if (self.match(Token.VAR)) {
+            self.varDeclaration();
+        } else {
+            self.statement();
+        }
+
+        if (self.panicMode) self.synchronize();
+    }
+
+    fn varDeclaration(self: *Self) void {
+        const global = self.parseVariable("Expect variable name.") catch |err| {
+            self.lastError = err;
+            self.errorAtPrevious("Couldn't create variable");
+            return;
+        };
+
+        if (self.match(Token.EQUAL)) {
+            self.expression();
+        } else {
+            self.emitOP(OP.NIL);
+        }
+
+        self.consume(Token.SEMICOLON, "Expect ';' after variable declaration.");
+
+        self.defineVariable(global);
+    }
+
+    fn parseVariable(self: *Self, errorMessage: []const u8) !u8 {
+        self.consume(Token.IDENTIFIER, errorMessage);
+        return try self.identifierConstant(self.previous);
+    }
+
+    fn identifierConstant(self: *Self, tok: scanner.Token) !u8 {
+        return self.makeConstant(Value.init(try self.objects.emplace(.String, &.{tok.lexeme})));
+    }
+
+    fn defineVariable(self: *Self, global: u8) void {
+        self.emit(OP.DEFINE_GLOBAL, global);
+    }
+
+    fn synchronize(self: *Self) void {
+        self.panicMode = false;
+
+        while ((self.current.type catch Token.NIL) != Token.EOF) {
+            if ((self.previous.type catch Token.NIL) == Token.SEMICOLON) return;
+            switch (self.current.type catch Token.NIL) {
+                Token.CLASS, Token.FUN, Token.VAR, Token.IF, Token.FOR, Token.WHILE, Token.PRINT, Token.RETURN => return,
+                else => self.advance(),
+            }
+        }
+    }
+
+    fn statement(self: *Self) void {
+        if (self.match(Token.PRINT)) {
+            self.printStatement();
+        } else {
+            self.expressionStatement();
+        }
+    }
+
+    fn expressionStatement(self: *Self) void {
+        self.expression();
+        self.consume(Token.SEMICOLON, "Expect ';' after expression.");
+        self.emitOP(OP.POP);
+    }
+
+    fn match(self: *Self, token: Token) bool {
+        if (!self.check(token)) return false;
+        self.advance();
+        return true;
+    }
+
+    fn check(self: *const Self, token: Token) bool {
+        return if (self.current.type) |tp| tp == token else |_| false;
+    }
+
+    fn printStatement(self: *Self) void {
+        self.expression();
+        self.consume(Token.SEMICOLON, "Expect ';' after value.");
+        self.emitOP(OP.PRINT);
+    }
+
+    pub fn compile(source: []const u8, objects: *Obj.List, allocator: std.mem.Allocator) CompilerError!Chunk {
+        // zig fmt: off
+        var self = Self{
+            .scanner = try scanner.Scanner.init(source),
+            .current = scanner.Token.Empty,
+            .previous = scanner.Token.Empty,
+            .panicMode = false,
+            .hadError = false,
+            .lastError = scanner.ScannerError.EmptyToken,
+            .compilingChunk = try Chunk.init(allocator),
+            .allocator = allocator,
+            .objects = objects
+        };
+        // zig fmt: on
         errdefer self.compilingChunk.deinit();
-        errdefer self.objects.deinit();
 
         self.advance();
-        self.expression();
-        self.consume(scanner.TokenType.EOF, "Expected end of expression.");
+        while (!self.match(Token.EOF)) {
+            self.declaration();
+        }
         self.endCompiler();
 
-        return if (self.hadError) self.lastError else Result{ .chunk = self.compilingChunk, .objects = self.objects };
+        return if (self.hadError) self.lastError else self.compilingChunk;
     }
 };

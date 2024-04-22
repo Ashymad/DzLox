@@ -63,7 +63,7 @@ pub const Obj = packed struct {
         pub const Arg = []const []const u8;
 
         obj: Super,
-        len: usize,
+        len: usize = 0,
         hash: u32,
 
         fn data(self: anytype) utils.copy_const(@TypeOf(self), [*]u8) {
@@ -76,7 +76,6 @@ pub const Obj = packed struct {
                 .obj = Super{
                     .type = Super.Type.String,
                 },
-                .len = 0,
                 .hash = params.hash,
             };
             for (arg) |el| {
@@ -142,8 +141,8 @@ pub const Obj = packed struct {
             return entry.some.key;
         }
 
-        pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
-            return try new(arg, arg_params(arg), allocator);
+        pub fn init(_: Arg, _: std.mem.Allocator) Error!*Self {
+            @compileError("The String Obj has to be interned");
         }
 
         fn free(self: *const Self, allocator: std.mem.Allocator) void {

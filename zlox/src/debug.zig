@@ -37,6 +37,9 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.NIL) => simpleInstruction("OP_NIL", offset),
         @intFromEnum(OP.NOT) => simpleInstruction("OP_NOT", offset),
         @intFromEnum(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
+        @intFromEnum(OP.DEFINE_GLOBAL) => try constantInstruction("OP_DEFINE_GLOBAL", ch, offset),
+        @intFromEnum(OP.PRINT) => simpleInstruction("OP_PRINT", offset),
+        @intFromEnum(OP.POP) => simpleInstruction("OP_POP", offset),
         else => blk: {
             print("Unknown opcode {}\n", .{try ch.code.get(offset)});
             break :blk offset + 1;

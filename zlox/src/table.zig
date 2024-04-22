@@ -111,7 +111,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
 
         pub fn set(self: *Self, key: K, val: V) TableError!bool {
             try self.checkCapacity();
-            return set_(find(self.entries, key), key, val);
+            return self.set_(find(self.entries, key), key, val);
         }
 
         pub fn get(self: *const Self, key: K) TableError!V {
