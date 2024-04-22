@@ -18,6 +18,10 @@ pub fn Array(comptime T: type, comptime S: type, comptime size: S) type {
             self.len += 1;
         }
 
+        pub fn slice(self: *const @This()) []const T {
+            return self.data[0..self.len];
+        }
+
         pub fn get(self: *const @This(), idx: S) !T {
             if (idx >= self.len)
                 return error.IndexOutOfBounds;

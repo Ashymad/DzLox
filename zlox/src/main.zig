@@ -15,9 +15,13 @@ pub fn main() anyerror!u8 {
     defer std.process.argsFree(allocator, args);
 
     if (args.len == 1) {
-        try repl(allocator);
+        try repl(allocator, false);
     } else if (args.len == 2) {
-        try runFile(allocator, args[1]);
+        if (std.mem.eql(u8, args[1], "-d")) {
+            try repl(allocator, true);
+        } else {
+            try runFile(allocator, args[1]);
+        }
     } else {
         std.debug.print("Usage: {s} [path]\n", .{args[0]});
         return 64;
@@ -34,7 +38,7 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
     defer allocator.free(text);
 }
 
-pub fn repl(allocator: std.mem.Allocator) anyerror!void {
+pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {
     var VM = vm.VM.init(allocator);
     defer VM.deinit();
 
@@ -42,7 +46,7 @@ pub fn repl(allocator: std.mem.Allocator) anyerror!void {
 
     while (Linenoise.linenoise("lox> ")) |line| {
         defer Linenoise.linenoiseFree(line);
-        VM.interpret(std.mem.span(line)) catch |err| {
+        VM.interpret(std.mem.span(line), dbg) catch |err| {
             std.debug.print("Error: {}\n", .{err});
         };
         _ = Linenoise.linenoiseHistoryAdd(line);

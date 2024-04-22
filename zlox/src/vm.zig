@@ -22,11 +22,11 @@ pub const VM = struct {
         return @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
     }
 
-    pub fn interpret(self: *@This(), source: []const u8) InterpreterError!void {
+    pub fn interpret(self: *@This(), source: []const u8, dbg: bool) InterpreterError!void {
         var chunk = try compiler.Compiler.compile(source, &self.objects, self.allocator);
         defer chunk.deinit();
 
-        try Interpreter(256).run(self, &chunk);
+        try Interpreter(256).run(self, &chunk, dbg);
     }
 
     fn Interpreter(size: comptime_int) type {
@@ -37,10 +37,10 @@ pub const VM = struct {
             stack: [size]Value,
             vm: *VM,
 
-            pub fn run(vm: *VM, chunk: *Chunk) InterpreterError!void {
+            pub fn run(vm: *VM, chunk: *Chunk, dbg: bool) InterpreterError!void {
                 var self = @This(){ .ip = chunk.code.data.ptr, .chunk = chunk, .stack = [_]Value{Value.init({})} ** size, .stackTop = undefined, .vm = vm };
                 self.stackTop = &self.stack;
-                try self.execute(false);
+                try self.execute(dbg);
             }
 
             fn read_byte(self: *@This()) u8 {
@@ -86,7 +86,7 @@ pub const VM = struct {
                 return @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr);
             }
 
-            fn execute(self: *@This(), comptime dbg: bool) !void {
+            fn execute(self: *@This(), dbg: bool) !void {
                 while (true) {
                     if (dbg) {
                         std.debug.print("          ", .{});

@@ -47,6 +47,11 @@ pub const Chunk = struct {
     }
 
     pub fn addConstant(self: *@This(), val: value.Value) Error!u8 {
+        for (self.constants.slice(), 0..) |el, i| {
+            if (el.eql(val)) {
+                return @intCast(i);
+            }
+        }
         try self.constants.add(val);
         return self.constants.len - 1;
     }
