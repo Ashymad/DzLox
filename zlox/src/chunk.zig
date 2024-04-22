@@ -22,6 +22,8 @@ pub const OP = enum(u8) {
     PRINT,
     POP,
     DEFINE_GLOBAL,
+    GET_GLOBAL,
+    SET_GLOBAL,
 };
 
 pub const Chunk = struct {

@@ -53,6 +53,10 @@ pub const VM = struct {
                 return self.chunk.constants.data[self.read_byte()];
             }
 
+            fn read_string(self: *@This()) *const Obj.String {
+                return self.read_constant().obj.cast(.String) catch unreachable;
+            }
+
             fn push(self: *@This(), val: Value) void {
                 self.stackTop[0] = val;
                 self.stackTop += 1;
@@ -118,7 +122,21 @@ pub const VM = struct {
                                 try self.binary_op(Value.number, Value.number, Callback.add);
                             }
                         },
-                        @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_constant().obj.cast(.String) catch unreachable, self.pop()),
+                        @intFromEnum(OP.GET_GLOBAL) => {
+                            const name = self.read_string();
+                            self.push(self.vm.globals.get(name) catch {
+                                self.runtimeError("Undefined variable: '{s}'", .{name.slice()});
+                                return InterpreterError.RuntimeError;
+                            });
+                        },
+                        @intFromEnum(OP.SET_GLOBAL) => {
+                            const name = self.read_string();
+                            self.vm.globals.set_existing(name, self.peek(0)) catch {
+                                self.runtimeError("Undefined variable: '{s}'", .{name.slice()});
+                                return InterpreterError.RuntimeError;
+                            };
+                        },
+                        @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), self.pop()),
                         @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
                         @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, Callback.mul),
                         @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, Callback.div),

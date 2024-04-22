@@ -114,11 +114,20 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             return self.set_(find(self.entries, key), key, val);
         }
 
+        pub fn set_existing(self: *Self, key: K, val: V) TableError!void {
+            try self.checkCapacity();
+            const entry = find(self.entries, key);
+            switch (entry.*) {
+                .some => _ = self.set_(entry, key, val),
+                else => return TableError.KeyError,
+            }
+        }
+
         pub fn get(self: *const Self, key: K) TableError!V {
             if (self.entries.len == 0)
                 return TableError.KeyError;
 
-            return switch (find(self.entries, key)) {
+            return switch (find(self.entries, key).*) {
                 .some => |some| some.value,
                 else => TableError.KeyError,
             };

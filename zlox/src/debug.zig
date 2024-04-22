@@ -38,6 +38,8 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.NOT) => simpleInstruction("OP_NOT", offset),
         @intFromEnum(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
         @intFromEnum(OP.DEFINE_GLOBAL) => try constantInstruction("OP_DEFINE_GLOBAL", ch, offset),
+        @intFromEnum(OP.GET_GLOBAL) => try constantInstruction("OP_GET_GLOBAL", ch, offset),
+        @intFromEnum(OP.SET_GLOBAL) => try constantInstruction("OP_SET_GLOBAL", ch, offset),
         @intFromEnum(OP.PRINT) => simpleInstruction("OP_PRINT", offset),
         @intFromEnum(OP.POP) => simpleInstruction("OP_POP", offset),
         else => blk: {

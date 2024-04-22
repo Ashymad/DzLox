@@ -45,7 +45,7 @@ pub const Compiler = struct {
 
     const Self = @This();
 
-    const ParseFn = *const fn (*Self) void;
+    const ParseFn = *const fn (*Self, bool) void;
 
     const ParseRule = struct {
         prefix: ?ParseFn,
@@ -87,7 +87,7 @@ pub const Compiler = struct {
                 T.GREATER_EQUAL => R(null,       S.binary,  P.COMPARISON ),
                 T.LESS          => R(null,       S.binary,  P.COMPARISON ),
                 T.LESS_EQUAL    => R(null,       S.binary,  P.COMPARISON ),
-                T.IDENTIFIER    => R(null,       null,      P.NONE ),
+                T.IDENTIFIER    => R(S.variable, null,      P.NONE ),
                 T.STRING        => R(S.string,   null,      P.NONE ),
                 T.NUMBER        => R(S.number,   null,      P.NONE ),
                 T.AND           => R(null,       null,      P.NONE ),
@@ -181,9 +181,11 @@ pub const Compiler = struct {
     }
 
     fn parsePrecedence(self: *Self, precedence: Precedence) void {
+        const canAssign = precedence.lessOrEq(Precedence.ASSIGNMENT);
+
         self.advance();
         if (getRule(self.previous.type catch unreachable).prefix) |prefixRule| {
-            prefixRule(self);
+            prefixRule(self, canAssign);
         } else {
             self.lastError = CompilerError.NotAnExpression;
             self.errorAtPrevious("Expect expression.");
@@ -193,12 +195,16 @@ pub const Compiler = struct {
         while (precedence.lessOrEq(getRule(self.current.type catch unreachable).precedence)) {
             self.advance();
             if (getRule(self.previous.type catch unreachable).infix) |infixRule| {
-                infixRule(self);
+                infixRule(self, canAssign);
             } else {
                 self.lastError = CompilerError.NotAnExpression;
                 self.errorAtPrevious("Expect expression.");
                 return;
             }
+        }
+
+        if (canAssign and self.match(Token.EQUAL)) {
+            self.errorAtPrevious("Invalid assignment target.");
         }
     }
 
@@ -228,7 +234,7 @@ pub const Compiler = struct {
         self.errorAtCurrent(message);
     }
 
-    fn number(self: *Self) void {
+    fn number(self: *Self, _: bool) void {
         self.emitConstant(Value.parseNumber(self.previous.lexeme) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Invalid numeric literal");
@@ -236,12 +242,26 @@ pub const Compiler = struct {
         });
     }
 
-    fn string(self: *Self) void {
+    fn string(self: *Self, _: bool) void {
         self.emitConstant(Value.init(self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
             self.lastError = err;
             self.errorAtPrevious("Couldn't allocate object");
             return;
         }));
+    }
+
+    fn variable(self: *Self, canAssign: bool) void {
+        self.namedVariable(self.previous, canAssign);
+    }
+
+    fn namedVariable(self: *Self, tok: scanner.Token, canAssign: bool) void {
+        const arg = self.identifierConstant(tok) catch return;
+        if (canAssign and self.match(Token.EQUAL)) {
+            self.expression();
+            self.emit(OP.SET_GLOBAL, arg);
+        } else {
+            self.emit(OP.GET_GLOBAL, arg);
+        }
     }
 
     fn emitConstant(self: *Self, val: Value) void {
@@ -256,12 +276,12 @@ pub const Compiler = struct {
         };
     }
 
-    fn grouping(self: *Self) void {
+    fn grouping(self: *Self, _: bool) void {
         self.expression();
         self.consume(Token.RIGHT_PAREN, "Expected ')' after expression");
     }
 
-    fn unary(self: *Self) void {
+    fn unary(self: *Self, _: bool) void {
         const operatorType = self.previous.type catch unreachable;
 
         self.parsePrecedence(Precedence.UNARY);
@@ -273,7 +293,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn literal(self: *Self) void {
+    fn literal(self: *Self, _: bool) void {
         switch (self.previous.type catch unreachable) {
             Token.FALSE => self.emitOP(OP.FALSE),
             Token.TRUE => self.emitOP(OP.TRUE),
@@ -282,7 +302,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn binary(self: *Self) void {
+    fn binary(self: *Self, _: bool) void {
         const operatorType = self.previous.type catch unreachable;
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
@@ -301,7 +321,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn ternary(self: *Self) void {
+    fn ternary(self: *Self, _: bool) void {
         const operatorType = self.previous.type catch unreachable;
         self.parsePrecedence(getRule(operatorType).precedence.inc());
 
@@ -325,11 +345,7 @@ pub const Compiler = struct {
     }
 
     fn varDeclaration(self: *Self) void {
-        const global = self.parseVariable("Expect variable name.") catch |err| {
-            self.lastError = err;
-            self.errorAtPrevious("Couldn't create variable");
-            return;
-        };
+        const global = self.parseVariable("Expect variable name.") catch return;
 
         if (self.match(Token.EQUAL)) {
             self.expression();
@@ -344,11 +360,15 @@ pub const Compiler = struct {
 
     fn parseVariable(self: *Self, errorMessage: []const u8) !u8 {
         self.consume(Token.IDENTIFIER, errorMessage);
-        return try self.identifierConstant(self.previous);
+        return self.identifierConstant(self.previous);
     }
 
     fn identifierConstant(self: *Self, tok: scanner.Token) !u8 {
-        return self.makeConstant(Value.init(try self.objects.emplace(.String, &.{tok.lexeme})));
+        return self.makeConstant(Value.init(self.objects.emplace(.String, &.{tok.lexeme}) catch |err| {
+            self.lastError = err;
+            self.errorAtPrevious("Couldn't allocate identifier");
+            return err;
+        }));
     }
 
     fn defineVariable(self: *Self, global: u8) void {
