@@ -3,3 +3,4 @@ zig-out/
 .cache/
 .envrc
 .tool-versions
+.zig-cache/

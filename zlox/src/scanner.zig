@@ -69,7 +69,7 @@ pub const Token = struct {
 };
 
 pub const Scanner = struct {
-    const identifiers = std.ComptimeStringMap(TokenType, .{
+    const identifiers = std.StaticStringMap(TokenType).initComptime(.{
         .{ "and", TokenType.AND },
         .{ "class", TokenType.CLASS },
         .{ "else", TokenType.ELSE },
