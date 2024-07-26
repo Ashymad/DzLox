@@ -23,10 +23,12 @@ pub const VM = struct {
     }
 
     pub fn interpret(self: *@This(), source: []const u8, dbg: bool) InterpreterError!void {
-        var chunk = try compiler.Compiler.compile(source, &self.objects, self.allocator);
+        const stackSize = 256;
+
+        var chunk = try compiler.Compiler(stackSize).compile(source, &self.objects, self.allocator);
         defer chunk.deinit();
 
-        try Interpreter(256).run(self, &chunk, dbg);
+        try Interpreter(stackSize).run(self, &chunk, dbg);
     }
 
     fn Interpreter(size: comptime_int) type {
@@ -121,6 +123,12 @@ pub const VM = struct {
                             } else {
                                 try self.binary_op(Value.number, Value.number, Callback.add);
                             }
+                        },
+                        @intFromEnum(OP.GET_LOCAL) => {
+                            self.push(self.stack[self.read_byte()]);
+                        },
+                        @intFromEnum(OP.SET_LOCAL) => {
+                            self.stack[self.read_byte()] = self.peek(0);
                         },
                         @intFromEnum(OP.GET_GLOBAL) => {
                             const name = self.read_string();

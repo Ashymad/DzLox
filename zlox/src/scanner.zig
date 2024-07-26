@@ -43,6 +43,7 @@ pub const TokenType = enum {
     THIS,
     TRUE,
     VAR,
+    CON,
     WHILE,
 
     EOF,
@@ -85,6 +86,7 @@ pub const Scanner = struct {
         .{ "this", TokenType.THIS },
         .{ "true", TokenType.TRUE },
         .{ "var", TokenType.VAR },
+        .{ "con", TokenType.CON },
         .{ "while", TokenType.WHILE },
     });
 

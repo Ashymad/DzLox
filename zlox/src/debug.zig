@@ -42,6 +42,8 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.SET_GLOBAL) => try constantInstruction("OP_SET_GLOBAL", ch, offset),
         @intFromEnum(OP.PRINT) => simpleInstruction("OP_PRINT", offset),
         @intFromEnum(OP.POP) => simpleInstruction("OP_POP", offset),
+        @intFromEnum(OP.GET_LOCAL) => try byteInstruction("OP_GET_LOCAL", ch, offset),
+        @intFromEnum(OP.SET_LOCAL) => try byteInstruction("OP_SET_LOCAL", ch, offset),
         else => blk: {
             print("Unknown opcode {}\n", .{try ch.code.get(offset)});
             break :blk offset + 1;
@@ -59,5 +61,10 @@ fn constantInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize 
     print("{s:<16} {d:4} '", .{ name, constant });
     (try ch.constants.get(constant)).print();
     print("'\n", .{});
+    return offset + 2;
+}
+
+fn byteInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
+    print("{s:<16} {d:4}\n", .{name, try ch.code.get(offset+1)});
     return offset + 2;
 }
