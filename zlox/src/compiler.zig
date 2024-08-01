@@ -515,6 +515,8 @@ pub fn Compiler(size: comptime_int) type {
                 self.ifStatement();
             } else if (self.match(Token.WHILE)) {
                 self.whileStatement();
+            } else if (self.match(Token.FOR)) {
+                self.forStatement();
             } else if (self.match(Token.LEFT_BRACE)) {
                 self.beginScope();
                 self.block();
@@ -538,6 +540,53 @@ pub fn Compiler(size: comptime_int) type {
 
             self.patchJump(exitJump);
             self.emitOP(OP.POP);
+        }
+
+        fn forStatement(self: *Self) void {
+            self.beginScope();
+            self.consume(Token.LEFT_PAREN, "Expect '(' after 'for'.");
+
+            if (self.match(Token.SEMICOLON)) {
+                // Empty initializer
+            } else if (self.match(Token.VAR)) {
+                self.varDeclaration();
+            } else if (self.match(Token.CON)) {
+                self.conDeclaration();
+            } else {
+                self.expressionStatement();
+            }
+
+            var loopStart = self.currentChunk().code.len;
+
+            var exitJump: ?usize = null;
+            if (!self.match(Token.SEMICOLON)) {
+                self.expression();
+                self.consume(Token.SEMICOLON, "Expect ';' after condition clause");
+
+                exitJump = self.emitJump(OP.JUMP_IF_FALSE);
+                self.emitOP(OP.POP);
+            }
+
+            if (!self.match(Token.RIGHT_PAREN)) {
+                const bodyJump = self.emitJump(OP.JUMP);
+                const incrementStart = self.currentChunk().code.len;
+                self.expression();
+                self.emitOP(OP.POP);
+                self.consume(Token.RIGHT_PAREN, "Expect ')' after increment clause");
+
+                self.emitLoop(loopStart);
+                loopStart = incrementStart;
+                self.patchJump(bodyJump);
+            }
+
+            self.statement();
+            self.emitLoop(loopStart);
+
+            if (exitJump) |jump| {
+                self.patchJump(jump);
+                self.emitOP(OP.POP);
+            }
+            self.endScope();
         }
 
         fn emitLoop(self: *Self, start: usize) void {
