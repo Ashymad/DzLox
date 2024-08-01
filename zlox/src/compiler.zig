@@ -360,15 +360,18 @@ pub fn Compiler(size: comptime_int) type {
 
         fn ternary(self: *Self, _: bool) void {
             const operatorType = self.previous.type catch unreachable;
-            self.parsePrecedence(getRule(operatorType).precedence.inc());
 
-            // emit bytecode
+            const thenJump = self.emitJump(OP.JUMP_IF_FALSE);
+            self.emitOP(OP.POP);
+            self.parsePrecedence(getRule(operatorType).precedence.inc());
+            const elseJump = self.emitJump(OP.JUMP);
+            self.patchJump(thenJump);
 
             self.consume(Token.COLON, "Expected ':' in ternary expression.");
 
+            self.emitOP(OP.POP);
             self.parsePrecedence(getRule(operatorType).precedence.inc());
-
-            // emit bytecode
+            self.patchJump(elseJump);
         }
 
         fn declaration(self: *Self) void {
@@ -490,6 +493,8 @@ pub fn Compiler(size: comptime_int) type {
         fn statement(self: *Self) void {
             if (self.match(Token.PRINT)) {
                 self.printStatement();
+            } else if (self.match(Token.IF)) {
+                self.ifStatement();
             } else if (self.match(Token.LEFT_BRACE)) {
                 self.beginScope();
                 self.block();
@@ -497,6 +502,44 @@ pub fn Compiler(size: comptime_int) type {
             } else {
                 self.expressionStatement();
             }
+        }
+
+        fn ifStatement(self: *Self) void {
+            self.consume(Token.LEFT_PAREN, "Expect '(' after 'if'.");
+            self.expression();
+            self.consume(Token.RIGHT_PAREN, "Expect ')' after condition");
+
+            const thenJump = self.emitJump(OP.JUMP_IF_FALSE);
+            self.emitOP(OP.POP);
+            self.statement();
+            const elseJump = self.emitJump(OP.JUMP);
+            self.patchJump(thenJump);
+            self.emitOP(OP.POP);
+            if (self.match(Token.ELSE)) self.statement();
+            self.patchJump(elseJump);
+        }
+
+        fn emitJump(self: *Self, instruction: OP) usize {
+            self.emitOP(instruction);
+            self.emitByte(0xff);
+            self.emitByte(0xff);
+            return self.currentChunk().code.len - 2;
+        }
+
+        fn patchJump(self: *Self, offset: usize) void {
+            const jump = self.currentChunk().code.len - offset - 2;
+            if (jump > std.math.maxInt(u16)) {
+                self.errorAtPrevious("Jump too large");
+                return;
+            }
+
+            self.currentChunk().code.set(offset, @intCast((jump >> 8) & 0xff)) catch {
+                self.errorAtPrevious("Invalid jump offset");
+            };
+            self.currentChunk().code.set(offset + 1, @intCast(jump & 0xff)) catch {
+                self.errorAtPrevious("Invalid jump offset");
+            };
+
         }
 
         fn block(self: *Self) void {

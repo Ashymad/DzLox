@@ -47,7 +47,7 @@ pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {
     while (Linenoise.linenoise("lox> ")) |line| {
         defer Linenoise.linenoiseFree(line);
         VM.interpret(std.mem.span(line), dbg) catch |err| {
-            std.debug.print("Error: {}\n", .{err});
+            std.debug.print("\nError: {}\n", .{err});
         };
         _ = Linenoise.linenoiseHistoryAdd(line);
     }

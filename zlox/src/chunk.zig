@@ -26,6 +26,8 @@ pub const OP = enum(u8) {
     SET_GLOBAL,
     GET_LOCAL,
     SET_LOCAL,
+    JUMP_IF_FALSE,
+    JUMP,
 };
 
 pub const Chunk = struct {

@@ -28,6 +28,8 @@ pub const VM = struct {
         var chunk = try compiler.Compiler(stackSize).compile(source, &self.objects, self.allocator);
         defer chunk.deinit();
 
+        //try debug.disassembleChunk(chunk, "Main");
+
         try Interpreter(stackSize).run(self, &chunk, dbg);
     }
 
@@ -45,14 +47,24 @@ pub const VM = struct {
                 try self.execute(dbg);
             }
 
+            fn ip_advance(self: *@This(), adv: usize) void {
+                self.ip += adv;
+            }
+
             fn read_byte(self: *@This()) u8 {
                 const out: u8 = self.ip[0];
-                self.ip += 1;
+                self.ip_advance(1);
                 return out;
             }
 
+            fn read_short(self: *@This()) u16 {
+                const msb: u16 = self.read_byte();
+                const lsb: u16 = self.read_byte();
+                return (msb << 8) | lsb;
+            }
+
             fn read_constant(self: *@This()) Value {
-                return self.chunk.constants.data[self.read_byte()];
+                return self.chunk.constants.get(self.read_byte()) catch unreachable;
             }
 
             fn read_string(self: *@This()) *const Obj.String {
@@ -123,6 +135,15 @@ pub const VM = struct {
                             } else {
                                 try self.binary_op(Value.number, Value.number, Callback.add);
                             }
+                        },
+                        @intFromEnum(OP.JUMP_IF_FALSE) => {
+                            const offset = self.read_short();
+                            if (!self.peek(0).isTruthy()) {
+                                self.ip_advance(offset);
+                            }
+                        },
+                        @intFromEnum(OP.JUMP) => {
+                            self.ip_advance(self.read_short());
                         },
                         @intFromEnum(OP.GET_LOCAL) => {
                             self.push(self.stack[self.read_byte()]);
