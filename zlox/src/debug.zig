@@ -44,8 +44,9 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.POP) => simpleInstruction("OP_POP", offset),
         @intFromEnum(OP.GET_LOCAL) => try byteInstruction("OP_GET_LOCAL", ch, offset),
         @intFromEnum(OP.SET_LOCAL) => try byteInstruction("OP_SET_LOCAL", ch, offset),
-        @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction("OP_JUMP_IF_FALSE", 1, ch, offset),
-        @intFromEnum(OP.JUMP) => try jumpInstruction("OP_JUMP", 1, ch, offset),
+        @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction("OP_JUMP_IF_FALSE", true, ch, offset),
+        @intFromEnum(OP.JUMP) => try jumpInstruction("OP_JUMP", true, ch, offset),
+        @intFromEnum(OP.LOOP) => try jumpInstruction("OP_LOOP", false, ch, offset),
         else => blk: {
             print("Unknown opcode {}\n", .{try ch.code.get(offset)});
             break :blk offset + 1;
@@ -71,11 +72,11 @@ fn byteInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
     return offset + 2;
 }
 
-fn jumpInstruction(name: []const u8, sign: u1, ch: chunk.Chunk, offset: usize) !usize {
+fn jumpInstruction(name: []const u8, sign: bool, ch: chunk.Chunk, offset: usize) !usize {
     const msb: u16 = try ch.code.get(offset + 1);
     const lsb: u16 = try ch.code.get(offset + 2);
     const jump = (msb << 8) | lsb;
 
-    print("{s:<16} {d:4} -> {d}\n", .{name, offset, offset + 3 + sign * jump});
+    print("{s:<16} {d:4} -> {d}\n", .{name, offset, if (sign) offset + 3 + jump else offset + 3 - jump});
     return offset + 3;
 }

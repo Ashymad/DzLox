@@ -47,13 +47,17 @@ pub const VM = struct {
                 try self.execute(dbg);
             }
 
-            fn ip_advance(self: *@This(), adv: usize) void {
+            fn ip_add(self: *@This(), adv: usize) void {
                 self.ip += adv;
+            }
+
+            fn ip_sub(self: *@This(), adv: usize) void {
+                self.ip -= adv;
             }
 
             fn read_byte(self: *@This()) u8 {
                 const out: u8 = self.ip[0];
-                self.ip_advance(1);
+                self.ip_add(1);
                 return out;
             }
 
@@ -139,11 +143,14 @@ pub const VM = struct {
                         @intFromEnum(OP.JUMP_IF_FALSE) => {
                             const offset = self.read_short();
                             if (!self.peek(0).isTruthy()) {
-                                self.ip_advance(offset);
+                                self.ip_add(offset);
                             }
                         },
                         @intFromEnum(OP.JUMP) => {
-                            self.ip_advance(self.read_short());
+                            self.ip_add(self.read_short());
+                        },
+                        @intFromEnum(OP.LOOP) => {
+                            self.ip_sub(self.read_short());
                         },
                         @intFromEnum(OP.GET_LOCAL) => {
                             self.push(self.stack[self.read_byte()]);

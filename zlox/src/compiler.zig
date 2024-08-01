@@ -101,7 +101,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.IDENTIFIER    => R(S.variable, null,      P.NONE ),
                     T.STRING        => R(S.string,   null,      P.NONE ),
                     T.NUMBER        => R(S.number,   null,      P.NONE ),
-                    T.AND           => R(null,       null,      P.NONE ),
+                    T.AND           => R(null,       S._and,    P.AND ),
                     T.CLASS         => R(null,       null,      P.NONE ),
                     T.ELSE          => R(null,       null,      P.NONE ),
                     T.FALSE         => R(S.literal,  null,      P.NONE ),
@@ -109,7 +109,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.FUN           => R(null,       null,      P.NONE ),
                     T.IF            => R(null,       null,      P.NONE ),
                     T.NIL           => R(S.literal,  null,      P.NONE ),
-                    T.OR            => R(null,       null,      P.NONE ),
+                    T.OR            => R(null,       S._or,     P.OR ),
                     T.PRINT         => R(null,       null,      P.NONE ),
                     T.RETURN        => R(null,       null,      P.NONE ),
                     T.SUPER         => R(null,       null,      P.NONE ),
@@ -318,6 +318,24 @@ pub fn Compiler(size: comptime_int) type {
             self.consume(Token.RIGHT_PAREN, "Expected ')' after expression");
         }
 
+        fn _and(self: *Self, _: bool) void {
+            const endJump = self.emitJump(OP.JUMP_IF_FALSE);
+
+            self.emitOP(OP.POP);
+            self.parsePrecedence(Precedence.AND);
+            self.patchJump(endJump);
+        }
+
+        fn _or(self: *Self, _: bool) void {
+            const elseJump = self.emitJump(OP.JUMP_IF_FALSE);
+            const endJump = self.emitJump(OP.JUMP);
+
+            self.patchJump(elseJump);
+            self.emitOP(OP.POP);
+            self.parsePrecedence(Precedence.OR);
+            self.patchJump(endJump);
+        }
+
         fn unary(self: *Self, _: bool) void {
             const operatorType = self.previous.type catch unreachable;
 
@@ -495,6 +513,8 @@ pub fn Compiler(size: comptime_int) type {
                 self.printStatement();
             } else if (self.match(Token.IF)) {
                 self.ifStatement();
+            } else if (self.match(Token.WHILE)) {
+                self.whileStatement();
             } else if (self.match(Token.LEFT_BRACE)) {
                 self.beginScope();
                 self.block();
@@ -502,6 +522,35 @@ pub fn Compiler(size: comptime_int) type {
             } else {
                 self.expressionStatement();
             }
+        }
+
+        fn whileStatement(self: *Self) void {
+            const loopStart = self.currentChunk().code.len;
+
+            self.consume(Token.LEFT_PAREN, "Expect '(' after 'while'.");
+            self.expression();
+            self.consume(Token.RIGHT_PAREN, "Expect ')' after condition");
+
+            const exitJump = self.emitJump(OP.JUMP_IF_FALSE);
+            self.emitOP(OP.POP);
+            self.statement();
+            self.emitLoop(loopStart);
+
+            self.patchJump(exitJump);
+            self.emitOP(OP.POP);
+        }
+
+        fn emitLoop(self: *Self, start: usize) void {
+            self.emitOP(OP.LOOP);
+            const offset = self.currentChunk().code.len - start + 2;
+
+            if (offset > std.math.maxInt(u16)) {
+                self.errorAtPrevious("Loop body too large");
+                return;
+            }
+
+            self.emitByte(@intCast((offset >> 8) & 0xff));
+            self.emitByte(@intCast(offset & 0xff));
         }
 
         fn ifStatement(self: *Self) void {
