@@ -22,6 +22,7 @@ pub const OP = enum(u8) {
     PRINT,
     POP,
     DEFINE_GLOBAL,
+    DEFINE_GLOBAL_CONSTANT,
     GET_GLOBAL,
     SET_GLOBAL,
     GET_LOCAL,

@@ -415,15 +415,10 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.SEMICOLON, "Expect ';' after variable declaration.");
 
-            self.defineVariable(global);
+            self.defineVariable(global, false);
         }
 
         fn conDeclaration(self: *Self) void {
-            if (self.scopeDepth == 0) {
-                self.errorAtPrevious("Global constans are not supported");
-                return;
-            }
-
             const global = self.parseVariable("Expect variable name.", true) catch return;
 
             self.consume(Token.EQUAL, "Constant variable has to be initialized.");
@@ -432,7 +427,7 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.SEMICOLON, "Expect ';' after variable declaration.");
 
-            self.defineVariable(global);
+            self.defineVariable(global, true);
         }
 
         fn parseVariable(self: *Self, errorMessage: []const u8, con: bool) !u8 {
@@ -487,13 +482,17 @@ pub fn Compiler(size: comptime_int) type {
             self.locals[self.localCount-1].depth = self.scopeDepth;
         }
 
-        fn defineVariable(self: *Self, global: u8) void {
+        fn defineVariable(self: *Self, global: u8, con: bool) void {
             if (self.scopeDepth > 0){
                 self.markInitialized();
                 return;
             }
 
-            self.emit(OP.DEFINE_GLOBAL, global);
+            if (con) {
+                self.emit(OP.DEFINE_GLOBAL_CONSTANT, global);
+            } else {
+                self.emit(OP.DEFINE_GLOBAL, global);
+            }
         }
 
         fn synchronize(self: *Self) void {

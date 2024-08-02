@@ -16,7 +16,32 @@ pub const VM = struct {
     globals: Globals,
     allocator: std.mem.Allocator,
 
-    const Globals = table.Table(*const Obj.String, Value, hash.hash_t(*const Obj.String), Obj.String.eql);
+    const Global = struct {
+        val: Value,
+        con: bool,
+
+        const Self = @This();
+
+        pub fn is_var(g: Self) bool {
+            return !g.con;
+        }
+
+        pub fn make_var(v: Value) Self {
+            return Self {
+                .val = v,
+                .con = false,
+            };
+        }
+
+        pub fn make_con(v: Value) Self {
+            return Self {
+                .val = v,
+                .con = true,
+            };
+        }
+    };
+
+    const Globals = table.Table(*const Obj.String, Global, hash.hash_t(*const Obj.String), Obj.String.eql);
 
     pub fn init(allocator: std.mem.Allocator) @This() {
         return @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
@@ -160,19 +185,25 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.GET_GLOBAL) => {
                             const name = self.read_string();
-                            self.push(self.vm.globals.get(name) catch {
-                                self.runtimeError("Undefined variable: '{s}'", .{name.slice()});
-                                return InterpreterError.RuntimeError;
-                            });
-                        },
-                        @intFromEnum(OP.SET_GLOBAL) => {
-                            const name = self.read_string();
-                            self.vm.globals.set_existing(name, self.peek(0)) catch {
+                            const global = self.vm.globals.get(name) catch {
                                 self.runtimeError("Undefined variable: '{s}'", .{name.slice()});
                                 return InterpreterError.RuntimeError;
                             };
+                            self.push(global.val);
                         },
-                        @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), self.pop()),
+                        @intFromEnum(OP.SET_GLOBAL) => {
+                            const name = self.read_string();
+                            const replaced = self.vm.globals.replace_if(name, Global.make_var(self.peek(0)), Global.is_var) catch {
+                                self.runtimeError("Undefined variable: '{s}'", .{name.slice()});
+                                return InterpreterError.RuntimeError;
+                            };
+                            if (!replaced) {
+                                self.runtimeError("Cannot assign to a constant: '{s}'", .{name.slice()});
+                                return InterpreterError.RuntimeError;
+                            }
+                        },
+                        @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
+                        @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
                         @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
                         @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, Callback.mul),
                         @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, Callback.div),
