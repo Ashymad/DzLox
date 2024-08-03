@@ -186,6 +186,12 @@ pub const Obj = packed struct {
         pub fn cast(self: *Self) *Super {
             return @ptrCast(self);
         }
+
+        pub fn set(self: *Self, key: value.Value, val: value.Value) !void {
+            self.hash +%= hash.hash(key) +% hash.hash(val);
+            _ = try self.map.set(key, val);
+        }
+
         fn print_element(key: value.Value, val: value.Value) void {
             key.print();
             std.debug.print(":", .{});

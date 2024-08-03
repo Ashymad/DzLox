@@ -223,7 +223,7 @@ pub const VM = struct {
                                 self.runtimeError("Cannot index a non-map value", .{});
                                 return InterpreterError.RuntimeError;
                             }
-                            _ = try (map.obj.cast(.Map) catch unreachable).map.set(idx, val);
+                            _ = try (map.obj.cast(.Map) catch unreachable).set(idx, val);
                             self.push(val);
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
