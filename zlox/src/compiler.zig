@@ -21,7 +21,7 @@ const Precedence = enum {
     TERM, // + -
     FACTOR, // * /
     UNARY, // ! -
-    CALL, // . ()
+    CALL, // . () []
     PRIMARY,
 
     pub fn inc(self: @This()) @This() {
@@ -80,9 +80,9 @@ pub fn Compiler(size: comptime_int) type {
                     // zig fmt: off
                     T.LEFT_PAREN    => R(S.grouping, null,      P.NONE ),
                     T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACE    => R(null,      null,      P.NONE ),
+                    T.LEFT_BRACE    => R(null,       null,      P.NONE ),
                     T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACKET  => R(S.map,       null,      P.NONE ),
+                    T.LEFT_BRACKET  => R(S.map,      S.index,   P.CALL ),
                     T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
                     T.COMMA         => R(null,       null,      P.NONE ),
                     T.DOT           => R(null,       null,      P.NONE ),
@@ -258,16 +258,16 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn string(self: *Self, _: bool) void {
-            self.emitConstant(Value.init(self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch |err| {
+            self.emitConstant(self.parseLiteralString() catch |err| {
                 self.lastError = err;
                 self.errorAtPrevious("Couldn't allocate object");
                 return;
-            }));
+            });
         }
 
         fn parseLiteralValue(self: *Self) CompilerError!Value {
             if (self.match(Token.STRING)) {
-                return Value.init(try self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
+                return self.parseLiteralString();
             } else if (self.match(Token.NUMBER)) {
                 return try Value.parseNumber(self.previous.lexeme);
             } else if (self.match(Token.FALSE)) {
@@ -282,6 +282,10 @@ pub fn Compiler(size: comptime_int) type {
                 self.errorAtCurrent("Map initalizer can only contain literals");
                 return error.UnexpectedToken;
             }
+        }
+
+        fn parseLiteralString(self: *Self) !Value {
+            return Value.init(try self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
         }
 
         fn parseLiteralMap(self: *Self) CompilerError!Value {
@@ -303,6 +307,17 @@ pub fn Compiler(size: comptime_int) type {
                 self.lastError = err;
                 return;
             });
+        }
+
+        fn index(self: *Self, canAssign: bool) void {
+            self.expression();
+            self.consume(Token.RIGHT_BRACKET, "Expect ']' after index expression");
+            if (canAssign and self.match(Token.EQUAL)) {
+                self.expression();
+                self.emitOP(OP.SET_INDEX);
+            } else {
+                self.emitOP(OP.GET_INDEX);
+            }
         }
 
         fn variable(self: *Self, canAssign: bool) void {

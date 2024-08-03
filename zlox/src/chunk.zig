@@ -30,6 +30,8 @@ pub const OP = enum(u8) {
     JUMP_IF_FALSE,
     JUMP,
     LOOP,
+    SET_INDEX,
+    GET_INDEX,
 };
 
 pub const Chunk = struct {

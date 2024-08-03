@@ -202,6 +202,30 @@ pub const VM = struct {
                                 return InterpreterError.RuntimeError;
                             }
                         },
+                        @intFromEnum(OP.GET_INDEX) => {
+                            const idx = self.pop();
+                            const map = self.pop();
+                            if (!map.is(Obj.Type.Map)) {
+                                self.runtimeError("Cannot index a non-map value", .{});
+                                return InterpreterError.RuntimeError;
+                            }
+                            self.push((map.obj.cast(.Map) catch unreachable).map.get(idx) catch {
+                                idx.print();
+                                self.runtimeError(" key does not exist in the map", .{});
+                                return InterpreterError.RuntimeError;
+                            });
+                        },
+                        @intFromEnum(OP.SET_INDEX) => {
+                            const val = self.pop();
+                            const idx = self.pop();
+                            const map = self.pop();
+                            if (!map.is(Obj.Type.Map)) {
+                                self.runtimeError("Cannot index a non-map value", .{});
+                                return InterpreterError.RuntimeError;
+                            }
+                            _ = try (map.obj.cast(.Map) catch unreachable).map.set(idx, val);
+                            self.push(val);
+                        },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
                         @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
