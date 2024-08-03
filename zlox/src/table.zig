@@ -87,6 +87,15 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             }
         }
 
+        pub fn for_each(self: *const Self, fun: fn (K, V) void) void {
+            for (self.entries) |entry| {
+                switch (entry) {
+                    .some => |some| fun(some.key, some.value),
+                    else => {},
+                }
+            }
+        }
+
         pub fn set_(self: *Self, entry: *Entry, key: K, val: V) bool {
             const isNewKey = switch (entry.*) {
                 .none => blk: {
@@ -99,6 +108,23 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
 
             entry.* = Entry{ .some = Entry.Some{ .key = key, .value = val } };
             return isNewKey;
+        }
+
+        pub fn eql(self: *const Self, other: *const Self, cmpval_fn: fn (V, V) bool) bool {
+            for (self.entries) |entry| {
+                switch (entry) {
+                    .some => |some| {
+                        switch (find(other.entries, some.key).*) {
+                            .some => |some2| if (!cmpval_fn(some.value, some2.value)) {
+                                return false;
+                            },
+                            else => return false,
+                        }
+                    },
+                    else => {},
+                }
+            }
+            return true;
         }
 
         pub fn checkCapacity(self: *Self) TableError!void {

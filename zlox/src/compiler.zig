@@ -3,6 +3,7 @@ const scanner = @import("scanner.zig");
 const Chunk = @import("chunk.zig").Chunk;
 const OP = @import("chunk.zig").OP;
 const Value = @import("value.zig").Value;
+const ValueArray = @import("value.zig").ValueArray;
 const Obj = @import("obj.zig").Obj;
 const debug = @import("debug.zig");
 const Token = scanner.TokenType;
@@ -79,8 +80,10 @@ pub fn Compiler(size: comptime_int) type {
                     // zig fmt: off
                     T.LEFT_PAREN    => R(S.grouping, null,      P.NONE ),
                     T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACE    => R(null,       null,      P.NONE ),
+                    T.LEFT_BRACE    => R(null,      null,      P.NONE ),
                     T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
+                    T.LEFT_BRACKET  => R(S.map,       null,      P.NONE ),
+                    T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
                     T.COMMA         => R(null,       null,      P.NONE ),
                     T.DOT           => R(null,       null,      P.NONE ),
                     T.MINUS         => R(S.unary,    S.binary,  P.TERM ),
@@ -260,6 +263,46 @@ pub fn Compiler(size: comptime_int) type {
                 self.errorAtPrevious("Couldn't allocate object");
                 return;
             }));
+        }
+
+        fn parseLiteralValue(self: *Self) CompilerError!Value {
+            if (self.match(Token.STRING)) {
+                return Value.init(try self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
+            } else if (self.match(Token.NUMBER)) {
+                return try Value.parseNumber(self.previous.lexeme);
+            } else if (self.match(Token.FALSE)) {
+                return Value.init(false);
+            } else if (self.match(Token.TRUE)) {
+                return Value.init(true);
+            } else if (self.match(Token.NIL)) {
+                return Value.init({});
+            } else if (self.match(Token.LEFT_BRACKET)) {
+                return self.parseLiteralMap();
+            } else {
+                self.errorAtCurrent("Map initalizer can only contain literals");
+                return error.UnexpectedToken;
+            }
+        }
+
+        fn parseLiteralMap(self: *Self) CompilerError!Value {
+            var array = try ValueArray.init(self.allocator);
+            defer array.deinit();
+            while (!self.match(Token.RIGHT_BRACKET)) {
+                try array.add(try self.parseLiteralValue());
+                self.consume(Token.COLON, "Expect ':' after key in map initalizer");
+                try array.add(try self.parseLiteralValue());
+                if (self.match(Token.RIGHT_BRACKET))
+                    break;
+                self.consume(Token.COMMA, "Expect ',' after value in map initalizer");
+            }
+            return Value.init(try self.objects.emplace(.Map, array));
+        }
+
+        fn map(self: *Self, _: bool) void {
+            self.emitConstant(self.parseLiteralMap() catch |err| {
+                self.lastError = err;
+                return;
+            });
         }
 
         fn variable(self: *Self, canAssign: bool) void {

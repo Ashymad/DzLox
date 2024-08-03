@@ -1,18 +1,31 @@
 const Obj = @import("obj.zig").Obj;
+const Value = @import("value.zig").Value;
 
 pub fn hash_append_t(T: type) fn (u32, T) u32 {
     return switch (T) {
-        []const u8, [*]const u8, []u8, [*]u8 => struct {
+        []const u8, []u8 => struct {
             pub fn fun(old: u32, val: T) u32 {
                 var ret = old;
                 for (val) |char| {
-                    ret ^= char;
-                    ret *%= 16777619;
+                    ret = (ret ^ char) *% 16777619;
                 }
                 return ret;
             }
         }.fun,
-        else => @compileError("Unsupported type"),
+        f64 => struct {
+            pub fn fun(old: u32, val: T) u32 {
+                const vali: *const u64 = @ptrCast(&val);
+                const int = vali.* & 0xfffffffffffff000;
+                const ptr: [*]const u8 = @ptrCast(&int);
+                return hash_append_t([]const u8)(old, ptr[0..@sizeOf(T)]);
+            }
+        }.fun,
+        bool => struct {
+            pub fn fun(old: u32, val: T) u32 {
+                return hash_append_t([]const u8)(old, if (val) "\xff" else "\x00");
+            }
+        }.fun,
+        else => @compileError("hash_append_t(" ++ @typeName(T) ++ "): Unsupported type"),
     };
 }
 
@@ -22,17 +35,34 @@ pub fn hash_append(ret: u32, val: anytype) u32 {
 
 pub fn hash_t(T: type) fn (T) u32 {
     return switch (T) {
-        []const u8, [*]const u8, []u8, [*]u8 => struct {
-            pub fn fun(val: T) u32 {
-                return hash_append_t(T)(2166136261, val);
-            }
-        }.fun,
-        Obj.String, *Obj.String, *const Obj.String => struct {
+        *Obj.Map, *const Obj.Map, *Obj.String, *const Obj.String => struct {
             pub fn fun(val: T) u32 {
                 return val.hash;
             }
         }.fun,
-        else => @compileError("Unsupported type"),
+        *Obj, *const Obj  => struct {
+            pub fn fun(val: T) u32 {
+                return switch (val.type) {
+                    .String => hash_append_t([]const u8)(hash(val.cast(.String) catch unreachable), "\x01"),
+                    .Map => hash_append_t([]const u8)(hash(val.cast(.Map) catch unreachable), "\x01"),
+                };
+            }
+        }.fun,
+        Value => struct {
+            pub fn fun(val: T) u32 {
+                return switch(val) {
+                    .number => |v| hash_append_t([]const u8)(hash(v), "\x01"),
+                    .bool => |v| hash_append_t([]const u8)(hash(v), "\x02"),
+                    .nil => hash_t([]const u8)("\x03"),
+                    .obj => |v| hash_append_t([]const u8)(hash(v), "\x04"),
+                };
+            }
+        }.fun,
+        else => struct {
+            pub fn fun(val: T) u32 {
+                return hash_append_t(T)(2166136261, val);
+            }
+        }.fun,
     };
 }
 

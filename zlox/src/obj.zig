@@ -2,6 +2,7 @@ const std = @import("std");
 const utils = @import("comptime_utils.zig");
 const hash = @import("hash.zig");
 const table = @import("table.zig");
+const value = @import("value.zig");
 
 pub const Obj = packed struct {
     const Super = @This();
@@ -35,6 +36,7 @@ pub const Obj = packed struct {
             var newObj = true;
             const obj = switch (tp) {
                 .String => (try String.intern(arg, &self.map, &newObj, self.allocator)).cast(),
+                else => try Super.init(tp, arg, self.allocator),
             };
             if (newObj) try self.push(obj);
             return obj;
@@ -145,14 +147,71 @@ pub const Obj = packed struct {
             @compileError("The String Obj has to be interned");
         }
 
-        fn free(self: *const Self, allocator: std.mem.Allocator) void {
+        pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
             const p: [*]align(@alignOf(Self)) const u8 = @ptrCast(self);
             allocator.free(p[0 .. @sizeOf(Self) + self.len]);
         }
     };
 
+    pub const Map = packed struct {
+        const Self = @This();
+        pub const Arg = value.ValueArray;
+        const Table = table.Table(value.Value, value.Value, hash.hash_t(value.Value), value.Value.eql);
+
+        obj: Super,
+        map: *Table,
+        hash: u32,
+
+        pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
+            const self: *Self = try allocator.create(Self);
+            self.* =  Self{
+                .obj = Super{
+                    .type = Super.Type.Map,
+                },
+                .map = try allocator.create(Table),
+                .hash = 0,
+            };
+            self.map.* = Table.init(allocator);
+            var i: u8 = 0;
+            while (i < arg.len) : (i += 2) {
+                const key = arg.get(i) catch unreachable;
+                const val = arg.get(i+1) catch unreachable;
+                self.hash +%= hash.hash(key) +% hash.hash(val);
+                if (!try self.map.set(key, val)) {
+                    return error.KeyError;
+                }
+            }
+            return self;
+        }
+        pub fn cast(self: *Self) *Super {
+            return @ptrCast(self);
+        }
+        fn print_element(key: value.Value, val: value.Value) void {
+            key.print();
+            std.debug.print(":", .{});
+            val.print();
+            std.debug.print(",", .{});
+
+        }
+        pub fn print(self: *const Self) void {
+            std.debug.print("[", .{});
+            self.map.for_each(Self.print_element);
+            std.debug.print("]", .{});
+        }
+        pub fn eql(self: *const Self, other: *const Self) bool {
+            return self.map.eql(other.map, value.Value.eql);
+        }
+        pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
+            self.map.deinit();
+            allocator.destroy(self.map);
+            allocator.destroy(self);
+        }
+
+    };
+
     pub const Type = enum(u8) {
         String,
+        Map,
 
         pub fn get(comptime self: @This()) type {
             return @field(Super, @tagName(self));
@@ -183,12 +242,12 @@ pub const Obj = packed struct {
         return self.type == tp;
     }
 
-    pub fn cast(self: *const Super, comptime tp: Type) Error!*const tp.get() {
+    pub fn cast(self: anytype, comptime tp: Type) Error!utils.copy_const(@TypeOf(self), *tp.get()) {
         if (!self.is(tp)) return Error.IllegalCastError;
         return self._cast(tp);
     }
 
-    fn _cast(self: *const Super, comptime tp: Type) *const tp.get() {
+    fn _cast(self: anytype, comptime tp: Type) utils.copy_const(@TypeOf(self), *tp.get()) {
         return @ptrCast(@alignCast(self));
     }
 };
