@@ -305,17 +305,17 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn parseLiteralMap(self: *Self) CompilerError!Value {
-            var array = try ValueArray.init(self.allocator);
-            defer array.deinit();
+            var ret = try self.objects.emplace(.Map, {});
+            var retmap = ret.cast(.Map) catch unreachable;
             while (!self.match(Token.RIGHT_BRACKET)) {
-                try array.add(try self.parseLiteralValue());
+                const key = try self.parseLiteralValue();
                 self.consume(Token.COLON, "Expect ':' after key in map initalizer");
-                try array.add(try self.parseLiteralValue());
+                try retmap.set(key, try self.parseLiteralValue());
                 if (self.match(Token.RIGHT_BRACKET))
                     break;
                 self.consume(Token.COMMA, "Expect ',' after value in map initalizer");
             }
-            return Value.init(try self.objects.emplace(.Map, array));
+            return Value.init(ret);
         }
 
         fn map(self: *Self, _: bool) void {

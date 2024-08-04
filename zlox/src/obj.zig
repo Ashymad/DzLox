@@ -161,14 +161,14 @@ pub const Obj = packed struct {
 
     pub const Map = packed struct {
         const Self = @This();
-        pub const Arg = value.ValueArray;
+        pub const Arg = void;
         const Table = table.Table(value.Value, value.Value, hash.hash_t(value.Value), value.Value.eql);
 
         obj: Super,
         map: *Table,
         hash: u32,
 
-        pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
+        pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
             self.* =  Self{
                 .obj = Super{
@@ -178,15 +178,6 @@ pub const Obj = packed struct {
                 .hash = 0,
             };
             self.map.* = Table.init(allocator);
-            var i: u8 = 0;
-            while (i < arg.len) : (i += 2) {
-                const key = arg.get(i) catch unreachable;
-                const val = arg.get(i+1) catch unreachable;
-                self.hash +%= hash.hash(key) +% hash.hash(val);
-                if (!try self.map.set(key, val)) {
-                    return error.KeyError;
-                }
-            }
             return self;
         }
         pub fn cast(self: *Self) *Super {
