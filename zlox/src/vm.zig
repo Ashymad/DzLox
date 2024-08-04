@@ -174,6 +174,9 @@ pub const VM = struct {
                         @intFromEnum(OP.JUMP) => {
                             self.ip_add(self.read_short());
                         },
+                        @intFromEnum(OP.JUMP_POP) => {
+                            self.ip_add(@intFromFloat(self.pop().number));
+                        },
                         @intFromEnum(OP.LOOP) => {
                             self.ip_sub(self.read_short());
                         },
@@ -207,11 +210,7 @@ pub const VM = struct {
                             const map = self.pop();
                             if (map.is(Obj.Type.Map) or map.is(Obj.Type.String)) {
                                 switch(map.obj.type) {
-                                    inline else => |tp| self.push((map.obj.cast(tp) catch unreachable).get(idx) catch {
-                                        idx.print();
-                                        self.runtimeError(" index invalid", .{});
-                                        return InterpreterError.RuntimeError;
-                                    })
+                                    inline else => |tp| self.push((map.obj.cast(tp) catch unreachable).get(idx) catch Value.init({})),
                                 }
                             } else {
                                 self.runtimeError("Cannot index a non-map value", .{});
@@ -226,7 +225,12 @@ pub const VM = struct {
                                 self.runtimeError("Cannot index a non-map value", .{});
                                 return InterpreterError.RuntimeError;
                             }
-                            _ = try (map.obj.cast(.Map) catch unreachable).set(idx, val);
+                            var m = map.obj.cast(.Map) catch unreachable;
+                            if (val.is(Value.nil)) {
+                                m.delete(idx);
+                            } else {
+                                _ = try m.set(idx, val);
+                            }
                             self.push(val);
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),

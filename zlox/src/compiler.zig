@@ -43,7 +43,6 @@ pub fn Compiler(size: comptime_int) type {
         hadError: bool,
         panicMode: bool,
         compilingChunk: Chunk,
-        allocator: std.mem.Allocator,
         objects: *Obj.List,
         locals: [size]Local,
         localCount: usize,
@@ -123,6 +122,8 @@ pub fn Compiler(size: comptime_int) type {
                     T.CON           => R(null,       null,      P.NONE ),
                     T.WHILE         => R(null,       null,      P.NONE ),
                     T.SWITCH        => R(null,       null,      P.NONE ),
+                    T.CASE          => R(null,       null,      P.NONE ),
+                    T.DEFAULT       => R(null,       null,      P.NONE ),
                     T.EOF           => R(null,       null,      P.NONE ),
                     // zig fmt: on
                 };
@@ -310,7 +311,15 @@ pub fn Compiler(size: comptime_int) type {
             while (!self.match(Token.RIGHT_BRACKET)) {
                 const key = try self.parseLiteralValue();
                 self.consume(Token.COLON, "Expect ':' after key in map initalizer");
-                try retmap.set(key, try self.parseLiteralValue());
+                const val = try self.parseLiteralValue();
+                if (val.is(Value.nil)) {
+                    self.errorAtPrevious("Nil cannot be stored in a map");
+                    return error.UnexpectedToken;
+                }
+                if (!try retmap.set(key, val)) {
+                    self.errorAtPrevious("Duplicate key in map literal");
+                    return error.UnexpectedToken;
+                }
                 if (self.match(Token.RIGHT_BRACKET))
                     break;
                 self.consume(Token.COMMA, "Expect ',' after value in map initalizer");
@@ -603,9 +612,70 @@ pub fn Compiler(size: comptime_int) type {
 
         fn switchStatement(self: *Self) void {
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
+
+            var ret = self.objects.emplace(.Map, {}) catch |err| {
+                self.lastError = err;
+                return;
+            };
+            var retmap = ret.cast(.Map) catch unreachable;
+            self.emitConstant(Value.init(ret));
+
             self.expression();
+
             self.consume(Token.RIGHT_PAREN, "Expect ')' after expression");
-            //var array = ValueArray.init(self.allocator);
+
+            self.emitOP(OP.GET_INDEX);
+            const defaultJump = self.emitJump(OP.JUMP_IF_FALSE);
+            var defaultPresent = false;
+            self.emitOP(OP.JUMP_POP);
+            const switchJump = self.currentChunk().code.len;
+            const exitJump = self.emitJump(OP.JUMP);
+
+            self.consume(Token.LEFT_BRACE, "Expect '{' after switch()");
+
+            while(!self.match(Token.RIGHT_BRACE)) {
+                if (self.match(Token.CASE)) {
+                    const case = self.parseLiteralValue() catch |err| {
+                        self.lastError = err;
+                        return;
+                    };
+                    const distance = self.currentChunk().code.len - switchJump;
+                    if (distance > std.math.maxInt(u52)) {
+                        self.errorAtCurrent("Switch body too large");
+                        return;
+                    }
+                    const isNew = retmap.set(case, Value.init(@as(Value.tagType(.number), @floatFromInt(distance)))) catch |err| {
+                        self.lastError = err;
+                        return;
+                    };
+                    if (!isNew) {
+                        self.errorAtCurrent("Duplicate case");
+                        return;
+                    }
+                } else if (self.match(Token.DEFAULT)) {
+                    if (defaultPresent) {
+                        self.errorAtCurrent("Duplicate default");
+                        return;
+                    }
+                    self.patchJump(defaultJump);
+                    self.emitOP(OP.POP);
+                    defaultPresent = true;
+                } else {
+                    self.errorAtCurrent("Expect 'case' or 'default'");
+                    return;
+                }
+                self.consume(Token.COLON, "Expect ':' after case");
+                self.statement();
+                self.emitLoop(switchJump);
+            }
+
+            if (!defaultPresent) {
+                self.patchJump(defaultJump);
+                self.emitOP(OP.POP);
+                self.emitLoop(switchJump);
+            }
+
+            self.patchJump(exitJump);
         }
 
         fn whileStatement(self: *Self) void {
@@ -780,7 +850,6 @@ pub fn Compiler(size: comptime_int) type {
                 .hadError = false,
                 .lastError = scanner.ScannerError.EmptyToken,
                 .compilingChunk = try Chunk.init(allocator),
-                .allocator = allocator,
                 .objects = objects,
                 .locals = [_]Local{Local{.name = scanner.Token.Empty, .depth = 0, .con = true}} ** size,
                 .localCount = 0,

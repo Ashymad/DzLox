@@ -184,13 +184,19 @@ pub const Obj = packed struct {
             return @ptrCast(self);
         }
 
-        pub fn set(self: *Self, key: value.Value, val: value.Value) !void {
+        pub fn set(self: *Self, key: value.Value, val: value.Value) !bool {
             self.hash +%= hash.hash(key) +% hash.hash(val);
-            _ = try self.map.set(key, val);
+            return self.map.set(key, val);
         }
         
         pub fn get(self: *Self, key: value.Value) !value.Value {
             return self.map.get(key);
+        }
+
+        pub fn delete(self: *Self, key: value.Value) void {
+            const val = self.map.get(key) catch return;
+            self.hash -%= hash.hash(key) -% hash.hash(val);
+            _ = self.map.delete(key);
         }
 
         fn print_element(key: value.Value, val: value.Value) void {

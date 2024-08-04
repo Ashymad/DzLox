@@ -45,6 +45,7 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.GET_LOCAL) => try byteInstruction("OP_GET_LOCAL", ch, offset),
         @intFromEnum(OP.SET_LOCAL) => try byteInstruction("OP_SET_LOCAL", ch, offset),
         @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction("OP_JUMP_IF_FALSE", true, ch, offset),
+        @intFromEnum(OP.JUMP_POP) => simpleInstruction("OP_JUMP_POP", offset),
         @intFromEnum(OP.JUMP) => try jumpInstruction("OP_JUMP", true, ch, offset),
         @intFromEnum(OP.LOOP) => try jumpInstruction("OP_LOOP", false, ch, offset),
         @intFromEnum(OP.SET_INDEX) => simpleInstruction("SET_INDEX", offset),

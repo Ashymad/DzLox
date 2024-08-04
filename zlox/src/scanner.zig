@@ -49,6 +49,8 @@ pub const TokenType = enum {
     CON,
     WHILE,
     SWITCH,
+    CASE,
+    DEFAULT,
 
     EOF,
 };
@@ -94,6 +96,8 @@ pub const Scanner = struct {
         .{ "con", TokenType.CON },
         .{ "while", TokenType.WHILE },
         .{ "switch", TokenType.SWITCH },
+        .{ "case", TokenType.CASE },
+        .{ "default", TokenType.DEFAULT },
     });
 
     pub fn init(source: []const u8) !@This() {

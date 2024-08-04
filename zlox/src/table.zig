@@ -175,9 +175,9 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
         pub fn delete(self: *Self, key: K) bool {
             if (self.entries.len == 0) return false;
 
-            var entry = find(self.entries, key);
-            switch (entry) {
-                .some => entry = .tomb,
+            const entry = find(self.entries, key);
+            switch (entry.*) {
+                .some => entry.* = .tomb,
                 else => return false,
             }
 

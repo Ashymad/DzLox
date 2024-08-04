@@ -29,6 +29,7 @@ pub const OP = enum(u8) {
     SET_LOCAL,
     JUMP_IF_FALSE,
     JUMP,
+    JUMP_POP,
     LOOP,
     SET_INDEX,
     GET_INDEX,
