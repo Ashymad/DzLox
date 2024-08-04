@@ -4,6 +4,7 @@ const Obj = @import("obj.zig").Obj;
 
 pub const Value = union(enum) {
     number: f64,
+    char: u8,
     bool: bool,
     nil: void,
     obj: *Obj,
@@ -13,6 +14,7 @@ pub const Value = union(enum) {
     pub fn print(self: @This()) void {
         switch (self) {
             .number => |val| std.debug.print("{d}", .{val}),
+            .char => |val| std.debug.print("'{s}'", .{&[_]u8{val}}),
             .bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
             .nil => std.debug.print("nil", .{}),
             .obj => |o| o.print(),
@@ -72,6 +74,7 @@ pub const Value = union(enum) {
         if (@intFromEnum(self) != @intFromEnum(other)) return false;
         return switch (self) {
             .number => |x| x == other.number,
+            .char => |x| x == other.char,
             .bool => |x| x == other.bool,
             .nil => true,
             .obj => |x| x.eql(other.obj),

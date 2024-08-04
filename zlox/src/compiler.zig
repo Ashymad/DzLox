@@ -103,6 +103,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.LESS_EQUAL    => R(null,       S.binary,  P.COMPARISON ),
                     T.IDENTIFIER    => R(S.variable, null,      P.NONE ),
                     T.STRING        => R(S.string,   null,      P.NONE ),
+                    T.CHAR          => R(S.char,     null,      P.NONE ),
                     T.NUMBER        => R(S.number,   null,      P.NONE ),
                     T.AND           => R(null,       S._and,    P.AND ),
                     T.CLASS         => R(null,       null,      P.NONE ),
@@ -121,6 +122,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.VAR           => R(null,       null,      P.NONE ),
                     T.CON           => R(null,       null,      P.NONE ),
                     T.WHILE         => R(null,       null,      P.NONE ),
+                    T.SWITCH        => R(null,       null,      P.NONE ),
                     T.EOF           => R(null,       null,      P.NONE ),
                     // zig fmt: on
                 };
@@ -265,11 +267,17 @@ pub fn Compiler(size: comptime_int) type {
             });
         }
 
+        fn char(self: *Self, _: bool) void {
+            self.emitConstant(self.parseLiteralChar());
+        }
+
         fn parseLiteralValue(self: *Self) CompilerError!Value {
             if (self.match(Token.STRING)) {
                 return self.parseLiteralString();
+            } else if (self.match(Token.CHAR)) {
+                return self.parseLiteralChar();
             } else if (self.match(Token.NUMBER)) {
-                return try Value.parseNumber(self.previous.lexeme);
+                return self.parseLiteralNumber();
             } else if (self.match(Token.FALSE)) {
                 return Value.init(false);
             } else if (self.match(Token.TRUE)) {
@@ -279,9 +287,17 @@ pub fn Compiler(size: comptime_int) type {
             } else if (self.match(Token.LEFT_BRACKET)) {
                 return self.parseLiteralMap();
             } else {
-                self.errorAtCurrent("Map initalizer can only contain literals");
+                self.errorAtCurrent("Not a literal value");
                 return error.UnexpectedToken;
             }
+        }
+
+        fn parseLiteralNumber(self: *Self) !Value {
+            return Value.parseNumber(self.previous.lexeme);
+        }
+
+        fn parseLiteralChar(self: *Self) Value {
+            return Value.init(self.previous.lexeme[1]);
         }
 
         fn parseLiteralString(self: *Self) !Value {
@@ -574,6 +590,8 @@ pub fn Compiler(size: comptime_int) type {
                 self.whileStatement();
             } else if (self.match(Token.FOR)) {
                 self.forStatement();
+            } else if (self.match(Token.SWITCH)) {
+                self.switchStatement();
             } else if (self.match(Token.LEFT_BRACE)) {
                 self.beginScope();
                 self.block();
@@ -581,6 +599,13 @@ pub fn Compiler(size: comptime_int) type {
             } else {
                 self.expressionStatement();
             }
+        }
+
+        fn switchStatement(self: *Self) void {
+            self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
+            self.expression();
+            self.consume(Token.RIGHT_PAREN, "Expect ')' after expression");
+            //var array = ValueArray.init(self.allocator);
         }
 
         fn whileStatement(self: *Self) void {

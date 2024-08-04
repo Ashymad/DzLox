@@ -52,9 +52,10 @@ pub fn hash_t(T: type) fn (T) u32 {
             pub fn fun(val: T) u32 {
                 return switch(val) {
                     .number => |v| hash_append_t([]const u8)(hash(v), "\x01"),
-                    .bool => |v| hash_append_t([]const u8)(hash(v), "\x02"),
-                    .nil => hash_t([]const u8)("\x03"),
-                    .obj => |v| hash_append_t([]const u8)(hash(v), "\x04"),
+                    .char => |v| hash_t([]const u8)(&[_]u8{v, 2}),
+                    .bool => |v| hash_append_t([]const u8)(hash(v), "\x03"),
+                    .nil => hash_t([]const u8)("\x04"),
+                    .obj => |v| hash_append_t([]const u8)(hash(v), "\x05"),
                 };
             }
         }.fun,

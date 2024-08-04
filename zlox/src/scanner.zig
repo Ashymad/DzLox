@@ -28,6 +28,7 @@ pub const TokenType = enum {
     // Literals.
     IDENTIFIER,
     STRING,
+    CHAR,
     NUMBER,
     // Keywords.
     AND,
@@ -47,17 +48,19 @@ pub const TokenType = enum {
     VAR,
     CON,
     WHILE,
+    SWITCH,
 
     EOF,
 };
 
-pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString, EmptyToken };
+pub const ScannerError = error{ UnexpectedCharacter, UnknownCharacter, UnterminatedString, UnterminatedChar, EmptyToken };
 
 pub fn ScannerErrorString(err: ScannerError) []const u8 {
     return switch (err) {
         ScannerError.UnknownCharacter => "Unknown Character",
         ScannerError.UnexpectedCharacter => "Unexpected Character",
         ScannerError.UnterminatedString => "Unterminated String",
+        ScannerError.UnterminatedChar => "Unterminated Char",
         ScannerError.EmptyToken => "Empty Token",
     };
 }
@@ -90,6 +93,7 @@ pub const Scanner = struct {
         .{ "var", TokenType.VAR },
         .{ "con", TokenType.CON },
         .{ "while", TokenType.WHILE },
+        .{ "switch", TokenType.SWITCH },
     });
 
     pub fn init(source: []const u8) !@This() {
@@ -124,6 +128,7 @@ pub const Scanner = struct {
             '<' => return self.makeToken(if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
             '>' => return self.makeToken(if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
             '"' => return self.string(),
+            '\'' => return self.char(),
             '0'...'9' => return self.number(),
             'a'...'z', 'A'...'Z', '_' => return self.identifier(),
             else => return self.makeToken(ScannerError.UnknownCharacter),
@@ -143,6 +148,15 @@ pub const Scanner = struct {
         _ = self.advance();
 
         return self.makeToken(TokenType.STRING);
+    }
+
+    fn char(self: *@This()) Token {
+        if (self.isAtEnd()) return self.makeToken(ScannerError.UnterminatedChar);
+        _  = self.advance();
+        if (self.isAtEnd() or self.peek() != '\'') return self.makeToken(ScannerError.UnterminatedChar);
+        _ = self.advance();
+
+        return self.makeToken(TokenType.CHAR);
     }
 
     fn skipWhitespace(self: *@This()) void {

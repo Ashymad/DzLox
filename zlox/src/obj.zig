@@ -99,6 +99,12 @@ pub const Obj = packed struct {
         pub fn eql(self: *const Self, other: *const Self) bool {
             return @intFromPtr(self) == @intFromPtr(other);
         }
+        pub fn get(self: *const Self, index: value.Value) !value.Value {
+            if (!index.is(value.Value.number) or index.number >= @as(value.Value.tagType(value.Value.number), @floatFromInt(self.len)) or index.number < 0) {
+                return error.KeyError;
+            }
+            return value.Value.init(self.data()[@intFromFloat(index.number)]);
+        }
 
         const ArgParams = struct { len: usize, hash: u32 };
 
@@ -190,6 +196,10 @@ pub const Obj = packed struct {
         pub fn set(self: *Self, key: value.Value, val: value.Value) !void {
             self.hash +%= hash.hash(key) +% hash.hash(val);
             _ = try self.map.set(key, val);
+        }
+        
+        pub fn get(self: *Self, key: value.Value) !value.Value {
+            return self.map.get(key);
         }
 
         fn print_element(key: value.Value, val: value.Value) void {

@@ -205,15 +205,18 @@ pub const VM = struct {
                         @intFromEnum(OP.GET_INDEX) => {
                             const idx = self.pop();
                             const map = self.pop();
-                            if (!map.is(Obj.Type.Map)) {
+                            if (map.is(Obj.Type.Map) or map.is(Obj.Type.String)) {
+                                switch(map.obj.type) {
+                                    inline else => |tp| self.push((map.obj.cast(tp) catch unreachable).get(idx) catch {
+                                        idx.print();
+                                        self.runtimeError(" index invalid", .{});
+                                        return InterpreterError.RuntimeError;
+                                    })
+                                }
+                            } else {
                                 self.runtimeError("Cannot index a non-map value", .{});
                                 return InterpreterError.RuntimeError;
                             }
-                            self.push((map.obj.cast(.Map) catch unreachable).map.get(idx) catch {
-                                idx.print();
-                                self.runtimeError(" key does not exist in the map", .{});
-                                return InterpreterError.RuntimeError;
-                            });
                         },
                         @intFromEnum(OP.SET_INDEX) => {
                             const val = self.pop();
