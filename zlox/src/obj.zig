@@ -19,10 +19,10 @@ pub const Obj = packed struct {
 
         tip: ?*Element,
         allocator: std.mem.Allocator,
-        map: String.Table,
+        table: String.Table,
 
         pub fn init(allocator: std.mem.Allocator) Self {
-            return Self{ .tip = null, .allocator = allocator, .map = String.Table.init(allocator) };
+            return Self{ .tip = null, .allocator = allocator, .table = String.Table.init(allocator) };
         }
 
         pub fn push(self: *Self, val: *Super) Error!void {
@@ -35,7 +35,7 @@ pub const Obj = packed struct {
         pub fn emplace(self: *Self, comptime tp: Type, arg: tp.get().Arg) Error!*Super {
             var newObj = true;
             const obj = switch (tp) {
-                .String => (try String.intern(arg, &self.map, &newObj, self.allocator)).cast(),
+                .String => (try String.intern(arg, &self.table, &newObj, self.allocator)).cast(),
                 else => try Super.init(tp, arg, self.allocator),
             };
             if (newObj) try self.push(obj);
@@ -55,7 +55,7 @@ pub const Obj = packed struct {
             while (self.pop()) |tip| {
                 self.allocator.destroy(tip);
             }
-            self.map.deinit();
+            self.table.deinit();
         }
     };
 
@@ -108,7 +108,7 @@ pub const Obj = packed struct {
 
         const ArgParams = struct { len: usize, hash: u32 };
 
-        fn map_check(m_arg: Arg, m_params: ArgParams) struct {
+        fn table_check(m_arg: Arg, m_params: ArgParams) struct {
             arg: Arg,
             params: ArgParams,
             pub fn check(self: *const @This(), k2: *const Self) bool {
@@ -124,7 +124,7 @@ pub const Obj = packed struct {
                 return false;
             }
         } {
-            return @TypeOf(map_check(m_arg, m_params)){ .arg = m_arg, .params = m_params };
+            return @TypeOf(table_check(m_arg, m_params)){ .arg = m_arg, .params = m_params };
         }
 
         fn arg_params(arg: Arg) ArgParams {
@@ -137,14 +137,14 @@ pub const Obj = packed struct {
             return ret;
         }
 
-        pub fn intern(arg: Arg, map: *Table, isNewKey: *bool, allocator: std.mem.Allocator) Error!*Self {
+        pub fn intern(arg: Arg, tabl: *Self.Table, isNewKey: *bool, allocator: std.mem.Allocator) Error!*Self {
             const params = arg_params(arg);
 
-            try map.checkCapacity();
-            const entry = Table.find_(map.entries, params.hash, map_check(arg, params));
-            isNewKey.* = entry.* != Table.Entry.some;
+            try tabl.checkCapacity();
+            const entry = Self.Table.find_(tabl.entries, params.hash, table_check(arg, params));
+            isNewKey.* = entry.* != Self.Table.Entry.some;
             if (isNewKey.*) {
-                _ = map.set_(entry, try new(arg, params, allocator), {});
+                _ = tabl.set_(entry, try new(arg, params, allocator), {});
             }
             return entry.some.key;
         }
@@ -159,25 +159,25 @@ pub const Obj = packed struct {
         }
     };
 
-    pub const Map = packed struct {
+    pub const Table = packed struct {
         const Self = @This();
         pub const Arg = void;
         const Table = table.Table(value.Value, value.Value, hash.hash_t(value.Value), value.Value.eql);
 
         obj: Super,
-        map: *Table,
+        table: *Self.Table,
         hash: u32,
 
         pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
             self.* =  Self{
                 .obj = Super{
-                    .type = Super.Type.Map,
+                    .type = Super.Type.Table,
                 },
-                .map = try allocator.create(Table),
+                .table = try allocator.create(Self.Table),
                 .hash = 0,
             };
-            self.map.* = Table.init(allocator);
+            self.table.* = Self.Table.init(allocator);
             return self;
         }
         pub fn cast(self: *Self) *Super {
@@ -186,17 +186,17 @@ pub const Obj = packed struct {
 
         pub fn set(self: *Self, key: value.Value, val: value.Value) !bool {
             self.hash +%= hash.hash(key) +% hash.hash(val);
-            return self.map.set(key, val);
+            return self.table.set(key, val);
         }
         
         pub fn get(self: *Self, key: value.Value) !value.Value {
-            return self.map.get(key);
+            return self.table.get(key);
         }
 
         pub fn delete(self: *Self, key: value.Value) void {
-            const val = self.map.get(key) catch return;
+            const val = self.table.get(key) catch return;
             self.hash -%= hash.hash(key) -% hash.hash(val);
-            _ = self.map.delete(key);
+            _ = self.table.delete(key);
         }
 
         fn print_element(key: value.Value, val: value.Value) void {
@@ -208,15 +208,15 @@ pub const Obj = packed struct {
         }
         pub fn print(self: *const Self) void {
             std.debug.print("[", .{});
-            self.map.for_each(Self.print_element);
+            self.table.for_each(Self.print_element);
             std.debug.print("]", .{});
         }
         pub fn eql(self: *const Self, other: *const Self) bool {
-            return self.map.eql(other.map, value.Value.eql);
+            return self.table.eql(other.table, value.Value.eql);
         }
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
-            self.map.deinit();
-            allocator.destroy(self.map);
+            self.table.deinit();
+            allocator.destroy(self.table);
             allocator.destroy(self);
         }
 
@@ -224,7 +224,7 @@ pub const Obj = packed struct {
 
     pub const Type = enum(u8) {
         String,
-        Map,
+        Table,
 
         pub fn get(comptime self: @This()) type {
             return @field(Super, @tagName(self));

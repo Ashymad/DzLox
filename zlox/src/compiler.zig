@@ -81,7 +81,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
                     T.LEFT_BRACE    => R(null,       null,      P.NONE ),
                     T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACKET  => R(S.map,      S.index,   P.CALL ),
+                    T.LEFT_BRACKET  => R(S.table,      S.index,   P.CALL ),
                     T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
                     T.COMMA         => R(null,       null,      P.NONE ),
                     T.DOT           => R(null,       null,      P.NONE ),
@@ -286,7 +286,7 @@ pub fn Compiler(size: comptime_int) type {
             } else if (self.match(Token.NIL)) {
                 return Value.init({});
             } else if (self.match(Token.LEFT_BRACKET)) {
-                return self.parseLiteralMap();
+                return self.parseLiteralTable();
             } else {
                 self.errorAtCurrent("Not a literal value");
                 return error.UnexpectedToken;
@@ -305,30 +305,30 @@ pub fn Compiler(size: comptime_int) type {
             return Value.init(try self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
         }
 
-        fn parseLiteralMap(self: *Self) CompilerError!Value {
-            var ret = try self.objects.emplace(.Map, {});
-            var retmap = ret.cast(.Map) catch unreachable;
+        fn parseLiteralTable(self: *Self) CompilerError!Value {
+            var ret = try self.objects.emplace(.Table, {});
+            var tabl = ret.cast(.Table) catch unreachable;
             while (!self.match(Token.RIGHT_BRACKET)) {
                 const key = try self.parseLiteralValue();
-                self.consume(Token.COLON, "Expect ':' after key in map initalizer");
+                self.consume(Token.COLON, "Expect ':' after key in table initalizer");
                 const val = try self.parseLiteralValue();
                 if (val.is(Value.nil)) {
-                    self.errorAtPrevious("Nil cannot be stored in a map");
+                    self.errorAtPrevious("Nil cannot be stored in a table");
                     return error.UnexpectedToken;
                 }
-                if (!try retmap.set(key, val)) {
-                    self.errorAtPrevious("Duplicate key in map literal");
+                if (!try tabl.set(key, val)) {
+                    self.errorAtPrevious("Duplicate key in table literal");
                     return error.UnexpectedToken;
                 }
                 if (self.match(Token.RIGHT_BRACKET))
                     break;
-                self.consume(Token.COMMA, "Expect ',' after value in map initalizer");
+                self.consume(Token.COMMA, "Expect ',' after value in table initalizer");
             }
             return Value.init(ret);
         }
 
-        fn map(self: *Self, _: bool) void {
-            self.emitConstant(self.parseLiteralMap() catch |err| {
+        fn table(self: *Self, _: bool) void {
+            self.emitConstant(self.parseLiteralTable() catch |err| {
                 self.lastError = err;
                 return;
             });
@@ -613,11 +613,11 @@ pub fn Compiler(size: comptime_int) type {
         fn switchStatement(self: *Self) void {
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            var ret = self.objects.emplace(.Map, {}) catch |err| {
+            var ret = self.objects.emplace(.Table, {}) catch |err| {
                 self.lastError = err;
                 return;
             };
-            var retmap = ret.cast(.Map) catch unreachable;
+            var tabl = ret.cast(.Table) catch unreachable;
             self.emitConstant(Value.init(ret));
 
             self.expression();
@@ -644,7 +644,7 @@ pub fn Compiler(size: comptime_int) type {
                         self.errorAtCurrent("Switch body too large");
                         return;
                     }
-                    const isNew = retmap.set(case, Value.init(@as(Value.tagType(.number), @floatFromInt(distance)))) catch |err| {
+                    const isNew = tabl.set(case, Value.init(@as(Value.tagType(.number), @floatFromInt(distance)))) catch |err| {
                         self.lastError = err;
                         return;
                     };

@@ -35,7 +35,7 @@ pub fn hash_append(ret: u32, val: anytype) u32 {
 
 pub fn hash_t(T: type) fn (T) u32 {
     return switch (T) {
-        *Obj.Map, *const Obj.Map, *Obj.String, *const Obj.String => struct {
+        *Obj.Table, *const Obj.Table, *Obj.String, *const Obj.String => struct {
             pub fn fun(val: T) u32 {
                 return val.hash;
             }
@@ -44,7 +44,7 @@ pub fn hash_t(T: type) fn (T) u32 {
             pub fn fun(val: T) u32 {
                 return switch (val.type) {
                     .String => hash_append_t([]const u8)(hash(val.cast(.String) catch unreachable), "\x01"),
-                    .Map => hash_append_t([]const u8)(hash(val.cast(.Map) catch unreachable), "\x02"),
+                    .Table => hash_append_t([]const u8)(hash(val.cast(.Table) catch unreachable), "\x02"),
                 };
             }
         }.fun,

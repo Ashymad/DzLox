@@ -22,36 +22,40 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         print("{d:4} ", .{try ch.lines.get(offset)});
     }
 
-    return switch (try ch.code.get(offset)) {
-        @intFromEnum(OP.RETURN) => simpleInstruction("OP_RETURN", offset),
-        @intFromEnum(OP.NEGATE) => simpleInstruction("OP_NEGATE", offset),
-        @intFromEnum(OP.ADD) => simpleInstruction("OP_ADD", offset),
-        @intFromEnum(OP.SUBTRACT) => simpleInstruction("OP_SUBTRACT", offset),
-        @intFromEnum(OP.DIVIDE) => simpleInstruction("OP_DIVIDE", offset),
-        @intFromEnum(OP.MULTIPLY) => simpleInstruction("OP_MULTIPLY", offset),
-        @intFromEnum(OP.TRUE) => simpleInstruction("OP_TRUE", offset),
-        @intFromEnum(OP.FALSE) => simpleInstruction("OP_FALSE", offset),
-        @intFromEnum(OP.EQUAL) => simpleInstruction("OP_EQUAL", offset),
-        @intFromEnum(OP.LESS) => simpleInstruction("OP_LESS", offset),
-        @intFromEnum(OP.GREATER) => simpleInstruction("OP_GREATER", offset),
-        @intFromEnum(OP.NIL) => simpleInstruction("OP_NIL", offset),
-        @intFromEnum(OP.NOT) => simpleInstruction("OP_NOT", offset),
-        @intFromEnum(OP.CONSTANT) => try constantInstruction("OP_CONSTANT", ch, offset),
-        @intFromEnum(OP.DEFINE_GLOBAL) => try constantInstruction("OP_DEFINE_GLOBAL", ch, offset),
-        @intFromEnum(OP.GET_GLOBAL) => try constantInstruction("OP_GET_GLOBAL", ch, offset),
-        @intFromEnum(OP.SET_GLOBAL) => try constantInstruction("OP_SET_GLOBAL", ch, offset),
-        @intFromEnum(OP.PRINT) => simpleInstruction("OP_PRINT", offset),
-        @intFromEnum(OP.POP) => simpleInstruction("OP_POP", offset),
-        @intFromEnum(OP.GET_LOCAL) => try byteInstruction("OP_GET_LOCAL", ch, offset),
-        @intFromEnum(OP.SET_LOCAL) => try byteInstruction("OP_SET_LOCAL", ch, offset),
-        @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction("OP_JUMP_IF_FALSE", true, ch, offset),
-        @intFromEnum(OP.JUMP_POP) => simpleInstruction("OP_JUMP_POP", offset),
-        @intFromEnum(OP.JUMP) => try jumpInstruction("OP_JUMP", true, ch, offset),
-        @intFromEnum(OP.LOOP) => try jumpInstruction("OP_LOOP", false, ch, offset),
-        @intFromEnum(OP.SET_INDEX) => simpleInstruction("SET_INDEX", offset),
-        @intFromEnum(OP.GET_INDEX) => simpleInstruction("GET_INDEX", offset),
+    const op = try ch.code.get(offset);
+    const name = @tagName(@as(OP, @enumFromInt(op)));
+
+    return switch (op) {
+        @intFromEnum(OP.RETURN) => simpleInstruction(name, offset),
+        @intFromEnum(OP.NEGATE) => simpleInstruction(name, offset),
+        @intFromEnum(OP.ADD) => simpleInstruction(name, offset),
+        @intFromEnum(OP.SUBTRACT) => simpleInstruction(name, offset),
+        @intFromEnum(OP.DIVIDE) => simpleInstruction(name, offset),
+        @intFromEnum(OP.MULTIPLY) => simpleInstruction(name, offset),
+        @intFromEnum(OP.TRUE) => simpleInstruction(name, offset),
+        @intFromEnum(OP.FALSE) => simpleInstruction(name, offset),
+        @intFromEnum(OP.EQUAL) => simpleInstruction(name, offset),
+        @intFromEnum(OP.LESS) => simpleInstruction(name, offset),
+        @intFromEnum(OP.GREATER) => simpleInstruction(name, offset),
+        @intFromEnum(OP.NIL) => simpleInstruction(name, offset),
+        @intFromEnum(OP.NOT) => simpleInstruction(name, offset),
+        @intFromEnum(OP.CONSTANT) => try constantInstruction(name, ch, offset),
+        @intFromEnum(OP.DEFINE_GLOBAL) => try constantInstruction(name, ch, offset),
+        @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => try constantInstruction(name, ch, offset),
+        @intFromEnum(OP.GET_GLOBAL) => try constantInstruction(name, ch, offset),
+        @intFromEnum(OP.SET_GLOBAL) => try constantInstruction(name, ch, offset),
+        @intFromEnum(OP.PRINT) => simpleInstruction(name, offset),
+        @intFromEnum(OP.POP) => simpleInstruction(name, offset),
+        @intFromEnum(OP.GET_LOCAL) => try byteInstruction(name, ch, offset),
+        @intFromEnum(OP.SET_LOCAL) => try byteInstruction(name, ch, offset),
+        @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction(name, true, ch, offset),
+        @intFromEnum(OP.JUMP_POP) => simpleInstruction(name, offset),
+        @intFromEnum(OP.JUMP) => try jumpInstruction(name, true, ch, offset),
+        @intFromEnum(OP.LOOP) => try jumpInstruction(name, false, ch, offset),
+        @intFromEnum(OP.SET_INDEX) => simpleInstruction(name, offset),
+        @intFromEnum(OP.GET_INDEX) => simpleInstruction(name, offset),
         else => blk: {
-            print("Unknown opcode {}\n", .{try ch.code.get(offset)});
+            print("Unknown opcode {d} {s}\n", .{op, name});
             break :blk offset + 1;
         },
     };
@@ -64,14 +68,14 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 
 fn constantInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
     const constant = try ch.code.get(offset + 1);
-    print("{s:<16} {d:4} '", .{ name, constant });
+    print("{s:<32} {d:4} '", .{ name, constant });
     (try ch.constants.get(constant)).print();
     print("'\n", .{});
     return offset + 2;
 }
 
 fn byteInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
-    print("{s:<16} {d:4}\n", .{name, try ch.code.get(offset+1)});
+    print("{s:<32} {d:4}\n", .{name, try ch.code.get(offset+1)});
     return offset + 2;
 }
 
@@ -80,6 +84,6 @@ fn jumpInstruction(name: []const u8, sign: bool, ch: chunk.Chunk, offset: usize)
     const lsb: u16 = try ch.code.get(offset + 2);
     const jump = (msb << 8) | lsb;
 
-    print("{s:<16} {d:4} -> {d}\n", .{name, offset, if (sign) offset + 3 + jump else offset + 3 - jump});
+    print("{s:<32} {d:4} -> {d}\n", .{name, offset, if (sign) offset + 3 + jump else offset + 3 - jump});
     return offset + 3;
 }

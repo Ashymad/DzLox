@@ -206,11 +206,11 @@ pub const VM = struct {
                             }
                         },
                         @intFromEnum(OP.GET_INDEX) => {
-                            const idx = self.pop();
-                            const map = self.pop();
-                            if (map.is(Obj.Type.Map) or map.is(Obj.Type.String)) {
-                                switch(map.obj.type) {
-                                    inline else => |tp| self.push((map.obj.cast(tp) catch unreachable).get(idx) catch Value.init({})),
+                            const key = self.pop();
+                            const obj = self.pop();
+                            if (obj.is(Obj.Type.Table) or obj.is(Obj.Type.String)) {
+                                switch(obj.obj.type) {
+                                    inline else => |tp| self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({})),
                                 }
                             } else {
                                 self.runtimeError("Cannot index a non-map value", .{});
@@ -219,17 +219,17 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.SET_INDEX) => {
                             const val = self.pop();
-                            const idx = self.pop();
-                            const map = self.pop();
-                            if (!map.is(Obj.Type.Map)) {
-                                self.runtimeError("Cannot index a non-map value", .{});
+                            const key = self.pop();
+                            const obj = self.pop();
+                            if (!obj.is(Obj.Type.Table)) {
+                                self.runtimeError("Cannot index a non-table value", .{});
                                 return InterpreterError.RuntimeError;
                             }
-                            var m = map.obj.cast(.Map) catch unreachable;
+                            var m = obj.obj.cast(.Table) catch unreachable;
                             if (val.is(Value.nil)) {
-                                m.delete(idx);
+                                m.delete(key);
                             } else {
-                                _ = try m.set(idx, val);
+                                _ = try m.set(key, val);
                             }
                             self.push(val);
                         },
