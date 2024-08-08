@@ -3,12 +3,37 @@ const utils = @import("comptime_utils.zig");
 const hash = @import("hash.zig");
 const table = @import("table.zig");
 const value = @import("value.zig");
+const chunk = @import("chunk.zig");
 
 pub const Obj = packed struct {
     const Super = @This();
     pub const Error = table.TableError || error{ OutOfMemory, IllegalCastError, NotFound };
 
     type: Type,
+
+    // pub const Template = packed struct {
+    //     const Self = @This();
+    //     pub const Arg = void;
+    //     obj: Super,
+    //     pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
+    //         _ = arg;
+    //         _ = allocator;
+    //     }
+    //     pub fn cast(self: *Self) *Super {
+    //         _ = self;
+    //     }
+    //     pub fn print(self: *const Self) void {
+    //         _ = self;
+    //     }
+    //     pub fn eql(self: *const Self, other: *const Self) bool {
+    //         _ = self;
+    //         _ = other;
+    //     }
+    //     pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
+    //         _ = self;
+    //         _ = allocator;
+    //     }
+    // };
 
     pub const List = struct {
         const Self = @This();
@@ -222,9 +247,46 @@ pub const Obj = packed struct {
 
     };
 
+    pub const Function = packed struct {
+        const Self = @This();
+        pub const Arg = void;
+
+        obj: Super,
+        arity: u8,
+        chunk: *chunk.Chunk,
+        name: *String,
+
+        pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
+            _ = arg;
+            _ = allocator;
+            return error.OutOfMemory;
+        }
+
+        pub fn cast(self: *Self) *Super {
+            return @ptrCast(self);
+        }
+
+        pub fn print(self: *const Self) void {
+            _ = self;
+        }
+
+        pub fn eql(self: *const Self, other: *const Self) bool {
+            _ = self;
+            _ = other;
+            return false;
+        }
+
+        pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
+            _ = self;
+            _ = allocator;
+        }
+
+    };
+
     pub const Type = enum(u8) {
         String,
         Table,
+        Function,
 
         pub fn get(comptime self: @This()) type {
             return @field(Super, @tagName(self));

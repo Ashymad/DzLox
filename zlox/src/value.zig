@@ -1,6 +1,7 @@
 const std = @import("std");
 const array = @import("array.zig");
 const Obj = @import("obj.zig").Obj;
+const utils = @import("comptime_utils.zig");
 
 pub const Value = union(enum) {
     number: f64,
@@ -21,14 +22,21 @@ pub const Value = union(enum) {
         }
     }
 
-    pub fn init(val: anytype) @This() {
-        inline for (@typeInfo(@This()).Union.fields) |field| {
-            if (@TypeOf(val) == field.type) {
-                return @unionInit(@This(), field.name, val);
-            }
-        }
-        @compileError("Invalid Value type");
+    pub fn tagNameOf(T: type) []const u8 {
+        return @tagName(utils.tagFromType(@This(), T));
     }
+
+    pub fn typeName(self: @This()) []const u8 {
+        return switch (self) {
+            .obj => |o| @tagName(o.type),
+            inline else => |tp| tagNameOf(@TypeOf(tp)),
+        };
+    }
+
+    pub fn init(val: anytype) @This() {
+        return @unionInit(@This(), tagNameOf(@TypeOf(val)), val);
+    }
+
 
     fn toTag(comptime from: anytype) Tag {
         return if (@TypeOf(from) == Obj.Type)
@@ -53,7 +61,7 @@ pub const Value = union(enum) {
     }
 
     pub fn tagType(comptime tag: anytype) type {
-        return @TypeOf(@field(@unionInit(@This(), @tagName(toTag(tag)), undefined), @tagName(toTag(tag))));
+        return utils.typeFromTag(@This(), toTag(tag));
     }
 
     pub const ParseNumberError = std.fmt.ParseFloatError;

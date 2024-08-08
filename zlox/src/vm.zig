@@ -61,7 +61,7 @@ pub const VM = struct {
     fn Interpreter(size: comptime_int) type {
         return struct {
             ip: [*]const u8,
-            chunk: *Chunk,
+            chunk: *const   Chunk,
             stackTop: [*]Value,
             stack: [size]Value,
             vm: *VM,
@@ -208,12 +208,18 @@ pub const VM = struct {
                         @intFromEnum(OP.GET_INDEX) => {
                             const key = self.pop();
                             const obj = self.pop();
-                            if (obj.is(Obj.Type.Table) or obj.is(Obj.Type.String)) {
+                            var pushed = false;
+                            if (obj.is(Value.obj)) {
                                 switch(obj.obj.type) {
-                                    inline else => |tp| self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({})),
+                                    .Function => {},
+                                    inline else => |tp| {
+                                        self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
+                                        pushed = true;
+                                    },
                                 }
-                            } else {
-                                self.runtimeError("Cannot index a non-map value", .{});
+                            }
+                            if (!pushed) {
+                                self.runtimeError("Cannot index a value of type {s}", .{obj.typeName()});
                                 return InterpreterError.RuntimeError;
                             }
                         },
