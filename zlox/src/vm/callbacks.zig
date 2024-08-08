@@ -1,6 +1,6 @@
-const Value = @import("value.zig").Value;
 const std = @import("std");
-const Obj = @import("obj.zig").Obj;
+const Obj = @import("../obj.zig").Obj;
+const Value = @import("../value.zig").Value;
 
 const Number = Value.tagType(.number);
 const Bool = Value.tagType(.bool);

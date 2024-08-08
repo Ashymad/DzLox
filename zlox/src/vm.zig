@@ -5,7 +5,7 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const compiler = @import("compiler.zig");
 const Obj = @import("obj.zig").Obj;
-const Callback = @import("vm_callbacks.zig");
+const Callback = @import("vm/callbacks.zig");
 const table = @import("table.zig");
 const hash = @import("hash.zig");
 
