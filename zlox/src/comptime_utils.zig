@@ -19,3 +19,7 @@ pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
     }
     @compileError("No matching tag for type " ++ @typeName(U) ++ " in Union " ++ @typeName(T));
 }
+
+pub fn fn_error(comptime fun: anytype) type {
+    return @typeInfo(@typeInfo(@TypeOf(fun)).Fn.return_type.?).ErrorUnion.error_set;
+}

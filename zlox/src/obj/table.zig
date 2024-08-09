@@ -2,6 +2,7 @@ const std = @import("std");
 const table = @import("../table.zig");
 const hash = @import("../hash.zig");
 const value = @import("../value.zig");
+const utils = @import("../comptime_utils.zig");
 
 const Super = @import("../obj.zig").Obj;
 const Error = Super.Error;
@@ -45,18 +46,23 @@ pub const Table = packed struct {
         self.hash -%= hash.hash(key) -% hash.hash(val);
         _ = self.table.delete(key);
     }
+    pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        const Printer = struct {
+            options: std.fmt.FormatOptions,
+            writer: @TypeOf(writer),
 
-    fn print_element(key: value.Value, val: value.Value) void {
-        key.print();
-        std.debug.print(":", .{});
-        val.print();
-        std.debug.print(",", .{});
+            pub fn print(this: @This(), key: value.Value, val: value.Value) utils.fn_error(@TypeOf(writer).write)!void {
+                try key.format(fmt, this.options, this.writer);
+                _ = try this.writer.write(":");
+                try val.format(fmt, this.options, this.writer);
+                _ = try this.writer.write(",");
+            }
 
-    }
-    pub fn print(self: *const Self) void {
-        std.debug.print("[", .{});
-        self.table.for_each(Self.print_element);
-        std.debug.print("]", .{});
+        };
+
+        _ = try writer.write("[");
+        try self.table.for_each_try(Printer{.options = options, .writer = writer}, Printer.print);
+        _ = try writer.writeAll("]");
     }
     pub fn eql(self: *const Self, other: *const Self) bool {
         return self.table.eql(other.table, value.Value.eql);

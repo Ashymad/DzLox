@@ -26,9 +26,10 @@ pub const Obj = packed struct {
     pub fn init(comptime tp: Type, arg: tp.get().Arg, allocator: std.mem.Allocator) !*Super {
         return (try tp.get().init(arg, allocator)).cast();
     }
-    pub fn print(self: *const Super) void {
+
+    pub fn format(self: *const Super, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self.type) {
-            inline else => |tp| self._cast(tp).print(),
+            inline else => |tp| try self._cast(tp).format(fmt, options, writer),
         }
     }
     pub fn eql(self: *const Super, other: *const Super) bool {

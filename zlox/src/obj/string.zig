@@ -41,8 +41,10 @@ pub const String = packed struct {
     pub fn cast(self: *Self) *Super {
         return @ptrCast(self);
     }
-    pub fn print(self: *const Self) void {
-        std.debug.print("\"{s}\"", .{self.slice()});
+    pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = try writer.write("\"");
+        _ = try writer.write(self.slice());
+        _ = try writer.writeAll("\"");
     }
     pub fn eql(self: *const Self, other: *const Self) bool {
         return @intFromPtr(self) == @intFromPtr(other);

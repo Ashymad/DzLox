@@ -14,18 +14,28 @@ pub const Function = packed struct {
     chunk: *chunk.Chunk,
     name: *String,
 
-    pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
-        _ = arg;
-        _ = allocator;
-        return error.OutOfMemory;
+    pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
+        const self: *Self = try allocator.create(Self);
+        self.* =  Self{
+            .obj = Super{
+                .type = Super.Type.Function,
+            },
+            .chunk = try allocator.create(chunk.Chunk),
+            .arity = 0,
+        };
+        self.chunk.* = chunk.Chunk.init(allocator);
+        return self;
     }
 
     pub fn cast(self: *Self) *Super {
         return @ptrCast(self);
     }
 
-    pub fn print(self: *const Self) void {
+    pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = self;
+        _ = fmt;
+        _ = options;
+        _ = writer;
     }
 
     pub fn eql(self: *const Self, other: *const Self) bool {
@@ -35,8 +45,9 @@ pub const Function = packed struct {
     }
 
     pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
-        _ = self;
-        _ = allocator;
+        self.chunk.deinit();
+        allocator.destroy(self.chunk);
+        allocator.destroy(self);
     }
 
 };

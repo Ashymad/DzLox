@@ -19,8 +19,11 @@ pub const Template = packed struct {
         return @ptrCast(self);
     }
 
-    pub fn print(self: *const Self) void {
+    pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = self;
+        _ = fmt;
+        _ = options;
+        _ = writer;
     }
 
     pub fn eql(self: *const Self, other: *const Self) bool {

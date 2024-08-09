@@ -10,31 +10,32 @@ pub const Value = union(enum) {
     nil: void,
     obj: *Obj,
 
-    pub const Tag = std.meta.Tag(@This());
+    const Self = @This();
+    pub const Tag = std.meta.Tag(Self);
 
-    pub fn print(self: @This()) void {
+    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
-            .number => |val| std.debug.print("{d}", .{val}),
-            .char => |val| std.debug.print("'{s}'", .{&[_]u8{val}}),
-            .bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
-            .nil => std.debug.print("nil", .{}),
-            .obj => |o| o.print(),
+            .number => |val| try writer.print("{d}", .{val}),
+            .char => |val| try writer.writeAll(&[_]u8{val}),
+            .bool => |val| try writer.writeAll(if (val) "true" else "false"),
+            .nil => try writer.writeAll("nil"),
+            .obj => |o| try o.format(fmt, options, writer),
         }
     }
 
     pub fn tagNameOf(T: type) []const u8 {
-        return @tagName(utils.tagFromType(@This(), T));
+        return @tagName(utils.tagFromType(Self, T));
     }
 
-    pub fn typeName(self: @This()) []const u8 {
+    pub fn typeName(self: Self) []const u8 {
         return switch (self) {
             .obj => |o| @tagName(o.type),
             inline else => |tp| tagNameOf(@TypeOf(tp)),
         };
     }
 
-    pub fn init(val: anytype) @This() {
-        return @unionInit(@This(), tagNameOf(@TypeOf(val)), val);
+    pub fn init(val: anytype) Self {
+        return @unionInit(Self, tagNameOf(@TypeOf(val)), val);
     }
 
 
@@ -45,32 +46,32 @@ pub const Value = union(enum) {
             from;
     }
 
-    pub fn is(self: @This(), comptime tag: anytype) bool {
+    pub fn is(self: Self, comptime tag: anytype) bool {
         return switch (self) {
             toTag(tag) => @TypeOf(tag) == Tag or self.obj.is(tag),
             else => false,
         };
     }
 
-    pub fn get(self: @This(), comptime tag: anytype) tagType(tag) {
+    pub fn get(self: Self, comptime tag: anytype) tagType(tag) {
         return @field(self, @tagName(toTag(tag)));
     }
 
-    pub fn set(self: *@This(), comptime tag: anytype, value: tagType(tag)) void {
+    pub fn set(self: *Self, comptime tag: anytype, value: tagType(tag)) void {
         @field(self, @tagName(toTag(tag))) = value;
     }
 
     pub fn tagType(comptime tag: anytype) type {
-        return utils.typeFromTag(@This(), toTag(tag));
+        return utils.typeFromTag(Self, toTag(tag));
     }
 
     pub const ParseNumberError = std.fmt.ParseFloatError;
 
-    pub fn parseNumber(str: []const u8) ParseNumberError!@This() {
-        return @This(){ .number = try std.fmt.parseFloat(tagType(Value.number), str) };
+    pub fn parseNumber(str: []const u8) ParseNumberError!Self {
+        return Self{ .number = try std.fmt.parseFloat(tagType(Value.number), str) };
     }
 
-    pub fn isTruthy(self: @This()) bool {
+    pub fn isTruthy(self: Self) bool {
         return switch (self) {
             .nil => false,
             .bool => |val| val,
@@ -78,7 +79,7 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn eql(self: @This(), other: @This()) bool {
+    pub fn eql(self: Self, other: Self) bool {
         if (@intFromEnum(self) != @intFromEnum(other)) return false;
         return switch (self) {
             .number => |x| x == other.number,

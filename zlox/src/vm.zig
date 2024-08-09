@@ -135,9 +135,7 @@ pub const VM = struct {
                         std.debug.print("          ", .{});
                         var stackPtr: [*]Value = &self.stack;
                         while (stackPtr != self.stackTop) : (stackPtr += 1) {
-                            std.debug.print("[ ", .{});
-                            stackPtr[0].print();
-                            std.debug.print(" ]", .{});
+                            std.debug.print("[{s}]", .{stackPtr[0]});
                         }
                         std.debug.print("\n", .{});
                         _ = try debug.disassembleInstruction(self.chunk.*, self.instruction_idx());
@@ -145,8 +143,7 @@ pub const VM = struct {
                     const instruction: u8 = self.read_byte();
                     switch (instruction) {
                         @intFromEnum(OP.PRINT) => {
-                            self.pop().print();
-                            std.debug.print("\n", .{});
+                            std.debug.print("{s}\n", .{self.pop()});
                         },
                         @intFromEnum(OP.RETURN) => return,
                         @intFromEnum(OP.POP) => _ = self.pop(),

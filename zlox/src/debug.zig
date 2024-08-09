@@ -68,9 +68,7 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 
 fn constantInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
     const constant = try ch.code.get(offset + 1);
-    print("{s:<32} {d:4} '", .{ name, constant });
-    (try ch.constants.get(constant)).print();
-    print("'\n", .{});
+    print("{s:<32} {d:4} '{s}'\n", .{ name, constant, try ch.constants.get(constant)});
     return offset + 2;
 }
 
