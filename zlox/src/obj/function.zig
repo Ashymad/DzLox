@@ -7,14 +7,20 @@ const String = Super.String;
 
 pub const Function = packed struct {
     const Self = @This();
-    pub const Arg = void;
+    pub const Arg = Type;
+
+    pub const Type = enum(u8) {
+        Function,
+        Script
+    };
 
     obj: Super,
     arity: u8,
     chunk: *chunk.Chunk,
-    name: *String,
+    name: ?*String,
+    type: Type,
 
-    pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
+    pub fn init(tp: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
             .obj = Super{
@@ -22,8 +28,10 @@ pub const Function = packed struct {
             },
             .chunk = try allocator.create(chunk.Chunk),
             .arity = 0,
+            .name = null,
+            .type = tp,
         };
-        self.chunk.* = chunk.Chunk.init(allocator);
+        self.chunk.* = try chunk.Chunk.init(allocator);
         return self;
     }
 
@@ -31,11 +39,17 @@ pub const Function = packed struct {
         return @ptrCast(self);
     }
 
-    pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = self;
-        _ = fmt;
-        _ = options;
-        _ = writer;
+    pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch(self.type) {
+            .Function => _ = try writer.write("<function: "),
+            .Script => _ = try writer.write("<script: "),
+        }
+        if (self.name) |name| {
+            _ = try writer.write(name.slice());
+        } else {
+            _ = try writer.write("-anonymous-");
+        }
+        _ = try writer.writeAll(">");
     }
 
     pub fn eql(self: *const Self, other: *const Self) bool {

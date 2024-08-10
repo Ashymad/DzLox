@@ -38,11 +38,11 @@ pub fn Compiler(size: comptime_int) type {
     return struct {
         current: scanner.Token,
         previous: scanner.Token,
-        scanner: scanner.Scanner,
+        scanner: *scanner.Scanner,
         lastError: CompilerError,
         hadError: bool,
         panicMode: bool,
-        compilingChunk: Chunk,
+        function: *Obj.Function,
         objects: *Obj.List,
         locals: [size]Local,
         localCount: usize,
@@ -151,7 +151,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn currentChunk(self: *Self) *Chunk {
-            return &self.compilingChunk;
+            return self.function.chunk;
         }
 
         fn emitByte(self: *Self, byte: u8) void {
@@ -178,8 +178,9 @@ pub fn Compiler(size: comptime_int) type {
             self.emitOP(op2);
         }
 
-        fn endCompiler(self: *Self) void {
+        fn end(self: *Self) *Obj.Function {
             self.emitReturn();
+            return self.function;
         }
 
         fn emitReturn(self: *Self) void {
@@ -840,31 +841,34 @@ pub fn Compiler(size: comptime_int) type {
             self.emitOP(OP.PRINT);
         }
 
-        pub fn compile(source: []const u8, objects: *Obj.List, allocator: std.mem.Allocator) CompilerError!Chunk {
-            // zig fmt: off
-            var self = Self{
-                .scanner = try scanner.Scanner.init(source),
+        fn init(scan: *scanner.Scanner, objects: *Obj.List, function: *Obj.Function) Self {
+            return Self{
+                .scanner = scan,
                 .current = scanner.Token.Empty,
                 .previous = scanner.Token.Empty,
                 .panicMode = false,
                 .hadError = false,
                 .lastError = scanner.ScannerError.EmptyToken,
-                .compilingChunk = try Chunk.init(allocator),
+                .function = function,
                 .objects = objects,
                 .locals = [_]Local{Local{.name = scanner.Token.Empty, .depth = 0, .con = true}} ** size,
-                .localCount = 0,
+                .localCount = 1,
                 .scopeDepth = 0,
             };
-            // zig fmt: on
-            errdefer self.compilingChunk.deinit();
+        }
+
+        pub fn compile(source: []const u8, objects: *Obj.List) CompilerError!*Obj.Function {
+            var scan = try scanner.Scanner.init(source);
+            var function = try objects.emplace(Obj.Type.Function, Obj.Function.Type.Script);
+            var self = Self.init(&scan, objects, function.cast(.Function) catch unreachable);
 
             self.advance();
+
             while (!self.match(Token.EOF)) {
                 self.declaration();
             }
-            self.endCompiler();
 
-            return if (self.hadError) self.lastError else self.compilingChunk;
+            return if (self.hadError) self.lastError else self.end();
         }
     };
 }

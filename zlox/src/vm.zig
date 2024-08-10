@@ -8,6 +8,7 @@ const Obj = @import("obj.zig").Obj;
 const Callback = @import("vm/callbacks.zig");
 const table = @import("table.zig");
 const hash = @import("hash.zig");
+const utils = @import("comptime_utils.zig");
 
 pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
 
@@ -43,45 +44,76 @@ pub const VM = struct {
 
     const Globals = table.Table(*const Obj.String, Global, hash.hash_t(*const Obj.String), Obj.String.eql);
 
+    const CallFrame = struct {
+        function: *const Obj.Function,
+        ip: [*]const u8,
+        slots: [*]Value,
+
+        pub fn init(function: *const Obj.Function, slots: [*]Value) @This() {
+            return @This() {
+                .function = function,
+                .ip = function.chunk.code.data.ptr,
+                .slots = slots
+            };
+        }
+    };
+
+
     pub fn init(allocator: std.mem.Allocator) @This() {
         return @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
     }
 
     pub fn interpret(self: *@This(), source: []const u8, dbg: bool) InterpreterError!void {
-        const stackSize = 256;
+        const callstack_size = 64;
+        const stack_size = 256;
 
-        var chunk = try compiler.Compiler(stackSize).compile(source, &self.objects, self.allocator);
-        defer chunk.deinit();
+        const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
         //try debug.disassembleChunk(chunk, "Main");
 
-        try Interpreter(stackSize).run(self, &chunk, dbg);
+        try Interpreter(callstack_size, stack_size).run(self, function, dbg);
     }
 
-    fn Interpreter(size: comptime_int) type {
+    fn Interpreter(callstack_size: comptime_int, stack_size: comptime_int) type {
         return struct {
-            ip: [*]const u8,
-            chunk: *const   Chunk,
+            frames: [callstack_size]CallFrame,
+            frameCount: usize,
             stackTop: [*]Value,
-            stack: [size]Value,
+            stack: [stack_size]Value,
             vm: *VM,
 
-            pub fn run(vm: *VM, chunk: *Chunk, dbg: bool) InterpreterError!void {
-                var self = @This(){ .ip = chunk.code.data.ptr, .chunk = chunk, .stack = [_]Value{Value.init({})} ** size, .stackTop = undefined, .vm = vm };
+            pub fn run(vm: *VM, function: *Obj.Function, dbg: bool) InterpreterError!void {
+                var self = @This(){
+                    .frames = [_]CallFrame{undefined} ** callstack_size,
+                    .frameCount = 1,
+                    .stack = [_]Value{Value.init({})} ** stack_size,
+                    .stackTop = undefined,
+                    .vm = vm
+                };
                 self.stackTop = &self.stack;
+                self.frames[0] = CallFrame.init(function, self.stackTop);
+                self.push(Value.init(function.cast()));
                 try self.execute(dbg);
             }
 
+            fn frame(self: anytype) utils.copy_const(@TypeOf(self), *CallFrame) {
+                return &self.frames[self.frameCount - 1];
+            }
+
+            fn ip(self: *const @This()) [*]const u8 {
+                return self.frame().ip;
+            }
+
             fn ip_add(self: *@This(), adv: usize) void {
-                self.ip += adv;
+                self.frame().ip += adv;
             }
 
             fn ip_sub(self: *@This(), adv: usize) void {
-                self.ip -= adv;
+                self.frame().ip -= adv;
             }
 
             fn read_byte(self: *@This()) u8 {
-                const out: u8 = self.ip[0];
+                const out: u8 = self.ip()[0];
                 self.ip_add(1);
                 return out;
             }
@@ -93,7 +125,7 @@ pub const VM = struct {
             }
 
             fn read_constant(self: *@This()) Value {
-                return self.chunk.constants.get(self.read_byte()) catch unreachable;
+                return self.frame().function.chunk.constants.get(self.read_byte()) catch unreachable;
             }
 
             fn read_string(self: *@This()) *const Obj.String {
@@ -126,7 +158,7 @@ pub const VM = struct {
             }
 
             fn instruction_idx(self: *const @This()) usize {
-                return @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.data.ptr);
+                return @intFromPtr(self.ip()) - @intFromPtr(self.frame().function.chunk.code.data.ptr);
             }
 
             fn execute(self: *@This(), dbg: bool) !void {
@@ -138,7 +170,7 @@ pub const VM = struct {
                             std.debug.print("[{s}]", .{stackPtr[0]});
                         }
                         std.debug.print("\n", .{});
-                        _ = try debug.disassembleInstruction(self.chunk.*, self.instruction_idx());
+                        _ = try debug.disassembleInstruction(self.frame().function.chunk.*, self.instruction_idx());
                     }
                     const instruction: u8 = self.read_byte();
                     switch (instruction) {
@@ -178,10 +210,10 @@ pub const VM = struct {
                             self.ip_sub(self.read_short());
                         },
                         @intFromEnum(OP.GET_LOCAL) => {
-                            self.push(self.stack[self.read_byte()]);
+                            self.push(self.frame().slots[self.read_byte()]);
                         },
                         @intFromEnum(OP.SET_LOCAL) => {
-                            self.stack[self.read_byte()] = self.peek(0);
+                            self.frame().slots[self.read_byte()] = self.peek(0);
                         },
                         @intFromEnum(OP.GET_GLOBAL) => {
                             const name = self.read_string();
@@ -255,7 +287,7 @@ pub const VM = struct {
 
             fn runtimeError(self: *@This(), comptime fmt: []const u8, args: anytype) void {
                 std.debug.print(fmt, args);
-                std.debug.print("\n[line {d}] in script\n", .{self.chunk.lines.get(self.instruction_idx()) catch 0});
+                std.debug.print("\n[line {d}] in script\n", .{self.frame().function.chunk.lines.get(self.instruction_idx()) catch 0});
             }
         };
     }
