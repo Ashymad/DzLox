@@ -27,14 +27,18 @@ pub const List = struct {
         self.tip = new_tip;
     }
 
-    pub fn emplace(self: *Self, comptime tp: Type, arg: tp.get().Arg) Error!*Super {
+    pub fn emplace(self: *Self, comptime tp: Type, arg: tp.get().Arg) Error!*tp.get() {
         var newObj = true;
         const obj = switch (tp) {
-            .String => (try String.intern(arg, &self.table, &newObj, self.allocator)).cast(),
-            else => try Super.init(tp, arg, self.allocator),
+            .String => try String.intern(arg, &self.table, &newObj, self.allocator),
+            else => try tp.get().init(arg, self.allocator),
         };
-        if (newObj) try self.push(obj);
+        if (newObj) try self.push(obj.cast());
         return obj;
+    }
+
+    pub fn emplace_cast(self: *Self, comptime tp: Type, arg: tp.get().Arg) Error!*Super {
+        return (try self.emplace(tp, arg)).cast();
     }
 
     pub fn pop(self: *Self) ?*Element {

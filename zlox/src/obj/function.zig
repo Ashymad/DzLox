@@ -17,7 +17,7 @@ pub const Function = packed struct {
     obj: Super,
     arity: u8,
     chunk: *chunk.Chunk,
-    name: ?*String,
+    name: ?*const String,
     type: Type,
 
     pub fn init(tp: Arg, allocator: std.mem.Allocator) Error!*Self {
@@ -52,9 +52,7 @@ pub const Function = packed struct {
         _ = try writer.writeAll(">");
     }
 
-    pub fn eql(self: *const Self, other: *const Self) bool {
-        _ = self;
-        _ = other;
+    pub fn eql(_: *const Self, _: *const Self) bool {
         return false;
     }
 

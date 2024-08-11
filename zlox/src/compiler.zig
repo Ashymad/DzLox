@@ -33,7 +33,6 @@ const Precedence = enum {
     }
 };
 
-
 pub fn Compiler(size: comptime_int) type {
     return struct {
         current: scanner.Token,
@@ -42,7 +41,7 @@ pub fn Compiler(size: comptime_int) type {
         lastError: CompilerError,
         hadError: bool,
         panicMode: bool,
-        function: *Obj.Function,
+        currentFunction: *Obj.Function,
         objects: *Obj.List,
         locals: [size]Local,
         localCount: usize,
@@ -151,7 +150,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn currentChunk(self: *Self) *Chunk {
-            return self.function.chunk;
+            return self.currentFunction.chunk;
         }
 
         fn emitByte(self: *Self, byte: u8) void {
@@ -180,7 +179,7 @@ pub fn Compiler(size: comptime_int) type {
 
         fn end(self: *Self) *Obj.Function {
             self.emitReturn();
-            return self.function;
+            return self.currentFunction;
         }
 
         fn emitReturn(self: *Self) void {
@@ -203,7 +202,7 @@ pub fn Compiler(size: comptime_int) type {
             const canAssign = precedence.lessOrEq(Precedence.ASSIGNMENT);
 
             self.advance();
-            if (getRule(self.previous.type catch unreachable).prefix) |prefixRule| {
+            if (getRule(self.previous.type catch return).prefix) |prefixRule| {
                 prefixRule(self, canAssign);
             } else {
                 self.lastError = CompilerError.NotAnExpression;
@@ -303,12 +302,11 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn parseLiteralString(self: *Self) !Value {
-            return Value.init(try self.objects.emplace(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
+            return Value.init(try self.objects.emplace_cast(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
         }
 
         fn parseLiteralTable(self: *Self) CompilerError!Value {
-            var ret = try self.objects.emplace(.Table, {});
-            var tabl = ret.cast(.Table) catch unreachable;
+            var tabl = try self.objects.emplace(.Table, {});
             while (!self.match(Token.RIGHT_BRACKET)) {
                 const key = try self.parseLiteralValue();
                 self.consume(Token.COLON, "Expect ':' after key in table initalizer");
@@ -325,7 +323,7 @@ pub fn Compiler(size: comptime_int) type {
                     break;
                 self.consume(Token.COMMA, "Expect ',' after value in table initalizer");
             }
-            return Value.init(ret);
+            return Value.init(tabl.cast());
         }
 
         fn table(self: *Self, _: bool) void {
@@ -477,7 +475,9 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn declaration(self: *Self) void {
-            if (self.match(Token.VAR)) {
+            if (self.match(Token.FUN)) {
+                self.funDeclaration();
+            } else if (self.match(Token.VAR)) {
                 self.varDeclaration();
             } else if (self.match(Token.CON)) {
                 self.conDeclaration();
@@ -486,6 +486,55 @@ pub fn Compiler(size: comptime_int) type {
             }
 
             if (self.panicMode) self.synchronize();
+        }
+
+        fn funDeclaration(self: *Self) void {
+            const global = self.parseVariable("Expect function name.", true) catch return;
+            self.markInitialized();
+            self.function(self.previous.lexeme, Obj.Function.Type.Function);
+            self.defineVariable(global, true);
+        }
+
+        fn function(self: *Self, name: []const u8, tp: Obj.Function.Type) void {
+            var fun = self.objects.emplace(Obj.Type.Function, tp) catch |err| {
+                self.errorAtPrevious("Couldn't allocate function");
+                self.lastError = err;
+                return;
+            };
+            fun.name = self.objects.emplace(Obj.Type.String, &.{name}) catch |err| {
+                self.errorAtPrevious("Couldn't allocate function name");
+                self.lastError = err;
+                return;
+            };
+
+            var compiler = Self.init(self.scanner, self.objects, fun);
+            compiler.current = self.current;
+            compiler.beginScope();
+
+            compiler.consume(Token.LEFT_PAREN, "Expect '(' after function name");
+            if (!compiler.check(Token.RIGHT_PAREN)) {
+                while (true) {
+                    if (fun.arity == std.math.maxInt(@TypeOf(fun.arity))) {
+                        self.errorAtCurrent("Too many arguments to a function");
+                        return;
+                    }
+                    fun.arity += 1;
+                    compiler.defineVariable(compiler.parseVariable("Expect parameter name.", true) catch return, true);
+                    if (!compiler.match(Token.COMMA)) break;
+                }
+            }
+            compiler.consume(Token.RIGHT_PAREN, "Expect ')' after parameters");
+            compiler.consume(Token.LEFT_BRACE, "Expect '{' before function body");
+
+            compiler.block();
+
+            self.current = compiler.current;
+
+            if (compiler.hadError) {
+                self.lastError = compiler.lastError;
+            } else {
+                self.emit(OP.CONSTANT, self.makeConstant(Value.init(compiler.end().cast())));
+            }
         }
 
         fn varDeclaration(self: *Self) void {
@@ -524,7 +573,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn identifierConstant(self: *Self, tok: scanner.Token) !u8 {
-            return self.makeConstant(Value.init(self.objects.emplace(.String, &.{tok.lexeme}) catch |err| {
+            return self.makeConstant(Value.init(self.objects.emplace_cast(.String, &.{tok.lexeme}) catch |err| {
                 self.lastError = err;
                 self.errorAtPrevious("Couldn't allocate identifier");
                 return err;
@@ -563,6 +612,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn markInitialized(self: *Self) void {
+            if(self.scopeDepth == 0) return;
             self.locals[self.localCount-1].depth = self.scopeDepth;
         }
 
@@ -614,12 +664,11 @@ pub fn Compiler(size: comptime_int) type {
         fn switchStatement(self: *Self) void {
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            var ret = self.objects.emplace(.Table, {}) catch |err| {
+            var tabl = self.objects.emplace(.Table, {}) catch |err| {
                 self.lastError = err;
                 return;
             };
-            var tabl = ret.cast(.Table) catch unreachable;
-            self.emitConstant(Value.init(ret));
+            self.emitConstant(Value.init(tabl.cast()));
 
             self.expression();
 
@@ -841,7 +890,7 @@ pub fn Compiler(size: comptime_int) type {
             self.emitOP(OP.PRINT);
         }
 
-        fn init(scan: *scanner.Scanner, objects: *Obj.List, function: *Obj.Function) Self {
+        fn init(scan: *scanner.Scanner, objects: *Obj.List, fun: *Obj.Function) Self {
             return Self{
                 .scanner = scan,
                 .current = scanner.Token.Empty,
@@ -849,7 +898,7 @@ pub fn Compiler(size: comptime_int) type {
                 .panicMode = false,
                 .hadError = false,
                 .lastError = scanner.ScannerError.EmptyToken,
-                .function = function,
+                .currentFunction = fun,
                 .objects = objects,
                 .locals = [_]Local{Local{.name = scanner.Token.Empty, .depth = 0, .con = true}} ** size,
                 .localCount = 1,
@@ -859,8 +908,8 @@ pub fn Compiler(size: comptime_int) type {
 
         pub fn compile(source: []const u8, objects: *Obj.List) CompilerError!*Obj.Function {
             var scan = try scanner.Scanner.init(source);
-            var function = try objects.emplace(Obj.Type.Function, Obj.Function.Type.Script);
-            var self = Self.init(&scan, objects, function.cast(.Function) catch unreachable);
+            const fun = try objects.emplace(Obj.Type.Function, Obj.Function.Type.Script);
+            var self = Self.init(&scan, objects, fun);
 
             self.advance();
 
