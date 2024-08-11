@@ -76,11 +76,11 @@ pub fn Compiler(size: comptime_int) type {
                 const tok: Token = @enumFromInt(i);
                 v.* = switch (tok) {
                     // zig fmt: off
-                    T.LEFT_PAREN    => R(S.grouping, null,      P.NONE ),
+                    T.LEFT_PAREN    => R(S.grouping, S.call,    P.CALL ),
                     T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
                     T.LEFT_BRACE    => R(null,       null,      P.NONE ),
                     T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACKET  => R(S.table,      S.index,   P.CALL ),
+                    T.LEFT_BRACKET  => R(S.table,    S.index,   P.CALL ),
                     T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
                     T.COMMA         => R(null,       null,      P.NONE ),
                     T.DOT           => R(null,       null,      P.NONE ),
@@ -183,7 +183,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn emitReturn(self: *Self) void {
-            self.emitOP(OP.RETURN);
+            self.emit2OP(OP.NIL, OP.RETURN);
         }
 
         fn errorAtCurrent(self: *Self, message: []const u8) void {
@@ -270,6 +270,28 @@ pub fn Compiler(size: comptime_int) type {
 
         fn char(self: *Self, _: bool) void {
             self.emitConstant(self.parseLiteralChar());
+        }
+
+        fn call(self: *Self, _: bool) void {
+            const argCount = self.argumentList();
+            self.emit(OP.CALL, argCount);
+        }
+        
+        fn argumentList(self: *Self) u8 {
+            var argCount: u8 = 0;
+            if (!self.check(Token.RIGHT_PAREN)) {
+                while(true) {
+                    self.expression();
+                    if (argCount == std.math.maxInt(u8)) {
+                        self.errorAtPrevious("Too many arguments");
+                        return argCount;
+                    }
+                    argCount += 1;
+                    if (!self.match(Token.COMMA)) break;
+                }
+            }
+            self.consume(Token.RIGHT_PAREN, "Expect ')' after arguments");
+            return argCount;
         }
 
         fn parseLiteralValue(self: *Self) CompilerError!Value {
@@ -646,6 +668,8 @@ pub fn Compiler(size: comptime_int) type {
                 self.printStatement();
             } else if (self.match(Token.IF)) {
                 self.ifStatement();
+            } else if (self.match(Token.RETURN)) {
+                self.returnStatement();
             } else if (self.match(Token.WHILE)) {
                 self.whileStatement();
             } else if (self.match(Token.FOR)) {
@@ -658,6 +682,20 @@ pub fn Compiler(size: comptime_int) type {
                 self.endScope();
             } else {
                 self.expressionStatement();
+            }
+        }
+
+        fn returnStatement(self: *Self) void {
+            if (self.currentFunction.type == Obj.Function.Type.Script) {
+                self.errorAtPrevious("Can't return from top-level code");
+                return;
+            }
+            if (self.match(Token.SEMICOLON)) {
+                self.emitReturn();
+            } else {
+                self.expression();
+                self.consume(Token.SEMICOLON, "Expect ';' after return value");
+                self.emitOP(OP.RETURN);
             }
         }
 

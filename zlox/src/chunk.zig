@@ -33,6 +33,7 @@ pub const OP = enum(u8) {
     LOOP,
     SET_INDEX,
     GET_INDEX,
+    CALL,
 };
 
 pub const Chunk = struct {

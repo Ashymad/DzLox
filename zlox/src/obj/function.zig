@@ -41,13 +41,13 @@ pub const Function = packed struct {
 
     pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch(self.type) {
-            .Function => _ = try writer.write("<function: "),
-            .Script => _ = try writer.write("<script: "),
+            .Function => _ = try writer.write("<F: "),
+            .Script => _ = try writer.write("<S: "),
         }
         if (self.name) |name| {
             _ = try writer.write(name.slice());
         } else {
-            _ = try writer.write("-anonymous-");
+            _ = try writer.write("-");
         }
         _ = try writer.writeAll(">");
     }

@@ -54,6 +54,7 @@ pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.LOOP) => try jumpInstruction(name, false, ch, offset),
         @intFromEnum(OP.SET_INDEX) => simpleInstruction(name, offset),
         @intFromEnum(OP.GET_INDEX) => simpleInstruction(name, offset),
+        @intFromEnum(OP.CALL) => simpleInstruction(name, offset),
         else => blk: {
             print("Unknown opcode {d} {s}\n", .{op, name});
             break :blk offset + 1;

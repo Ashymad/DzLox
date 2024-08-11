@@ -10,7 +10,7 @@ const table = @import("table.zig");
 const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
 
-pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     objects: Obj.List,
@@ -146,6 +146,26 @@ pub const VM = struct {
                 return (self.stackTop - (1 + distance))[0];
             }
 
+            fn callValue(self: *@This(), callee: Value, argCount: u8) !void {
+                if(callee.is(Obj.Type.Function)) {
+                    try self.call(callee.obj.cast(.Function) catch unreachable, argCount);
+                } else {
+                    self.runtimeError("Can only call functions and classes", .{});
+                    return InterpreterError.RuntimeError;
+                }
+            }
+
+            fn call(self: *@This(), callee: *Obj.Function, argCount: u8) !void {
+                if (argCount != callee.arity) {
+                    self.runtimeError("Expected {d} arguments but got {d}", .{callee.arity, argCount});
+                    return InterpreterError.RuntimeError;
+                }
+                if (self.frameCount == callstack_size - 1)
+                    return InterpreterError.StackOverflow;
+                self.frameCount += 1;
+                self.frames[self.frameCount - 1] = CallFrame.init(callee, self.stackTop - argCount - 1);
+            }
+
             fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
                 const b = self.pop();
                 const a = self.pop();
@@ -177,7 +197,16 @@ pub const VM = struct {
                         @intFromEnum(OP.PRINT) => {
                             std.debug.print("{s}\n", .{self.pop()});
                         },
-                        @intFromEnum(OP.RETURN) => return,
+                        @intFromEnum(OP.RETURN) => {
+                            const result = self.pop();
+                            if (self.frameCount == 1) {
+                                _ = self.pop();
+                                return;
+                            }
+                            self.stackTop = self.frame().slots;
+                            self.frameCount -= 1;
+                            self.push(result);
+                        },
                         @intFromEnum(OP.POP) => _ = self.pop(),
                         @intFromEnum(OP.CONSTANT) => self.push(self.read_constant()),
                         @intFromEnum(OP.NEGATE) => {
@@ -268,6 +297,10 @@ pub const VM = struct {
                             }
                             self.push(val);
                         },
+                        @intFromEnum(OP.CALL) => {
+                            const argCount = self.read_byte();
+                            try self.callValue(self.peek(argCount), argCount);
+                        },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
                         @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
@@ -286,8 +319,14 @@ pub const VM = struct {
             }
 
             fn runtimeError(self: *@This(), comptime fmt: []const u8, args: anytype) void {
-                std.debug.print(fmt, args);
-                std.debug.print("\n[line {d}] in script\n", .{self.frame().function.chunk.lines.get(self.instruction_idx()) catch 0});
+                var i = self.frameCount - 1;
+                while (true) : (i -= 1) {
+                    const fram = self.frames[i];
+                    const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.function.chunk.code.data.ptr);
+                    std.debug.print("[line {d}] in {s}\n", .{fram.function.chunk.lines.get(idx) catch 0, fram.function});
+                    if (i == 0) break;
+                }
+                std.debug.print(fmt ++ "\n", args);
             }
         };
     }
