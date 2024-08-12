@@ -183,7 +183,10 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn emitReturn(self: *Self) void {
-            self.emit2OP(OP.NIL, OP.RETURN);
+            if (self.currentFunction.type != Obj.Function.Type.Script) {
+                self.emitOP(OP.NIL);
+            }
+            self.emitOP(OP.RETURN);
         }
 
         fn errorAtCurrent(self: *Self, message: []const u8) void {

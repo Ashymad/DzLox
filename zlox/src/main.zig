@@ -39,7 +39,7 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
 }
 
 pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {
-    var VM = vm.VM.init(allocator);
+    var VM = try vm.VM.init(allocator);
     defer VM.deinit();
 
     _ = Linenoise.linenoiseHistorySetMaxLen(100);

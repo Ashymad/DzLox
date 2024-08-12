@@ -9,6 +9,7 @@ const Callback = @import("vm/callbacks.zig");
 const table = @import("table.zig");
 const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
+const vm_native = @import("vm/native.zig");
 
 pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
@@ -58,9 +59,17 @@ pub const VM = struct {
         }
     };
 
+    fn defineNative(self: *@This(), name: []const u8, arity: u8, fun: Obj.Native.Fn) !void {
+        const nameObj = try self.objects.emplace(.String, &.{name});
+        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{.fun = fun, .name = name, .arity = arity});
+        _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
+    }
 
-    pub fn init(allocator: std.mem.Allocator) @This() {
-        return @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
+    pub fn init(allocator: std.mem.Allocator) !@This() {
+        var self = @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
+        try self.defineNative("clock", 0, vm_native.clock);
+        try vm_native.set_start();
+        return self;
     }
 
     pub fn interpret(self: *@This(), source: []const u8, dbg: bool) InterpreterError!void {
@@ -149,6 +158,16 @@ pub const VM = struct {
             fn callValue(self: *@This(), callee: Value, argCount: u8) !void {
                 if(callee.is(Obj.Type.Function)) {
                     try self.call(callee.obj.cast(.Function) catch unreachable, argCount);
+                } else if(callee.is(Obj.Type.Native)) {
+                    const native = callee.obj.cast(.Native) catch unreachable;
+                    if (argCount != native.arity) {
+                        self.runtimeError("Expected {d} arguments but got {d}", .{native.arity, argCount});
+                        return InterpreterError.RuntimeError;
+                    }
+                    const result = native.call(argCount, self.stackTop - argCount);
+                    self.stackTop -= argCount + 1;
+                    self.push(result);
+                    return;
                 } else {
                     self.runtimeError("Can only call functions and classes", .{});
                     return InterpreterError.RuntimeError;
@@ -269,7 +288,7 @@ pub const VM = struct {
                             var pushed = false;
                             if (obj.is(Value.obj)) {
                                 switch(obj.obj.type) {
-                                    .Function => {},
+                                    .Function, .Native => {},
                                     inline else => |tp| {
                                         self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
                                         pushed = true;
