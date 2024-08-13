@@ -19,6 +19,7 @@ pub const Obj = packed struct {
         Table,
         Function,
         Native,
+        List,
 
         pub fn get(comptime self: @This()) type {
             return @field(Super, @tagName(self));

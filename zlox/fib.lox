@@ -1,0 +1,32 @@
+fun fib(n) {
+  if (n < 2) return n;
+  return fib(n - 2) + fib(n - 1);
+}
+
+fun printf(fmt, args) {
+    var args_i = 0;
+    for(var i = 0; fmt[i]; i = i + 1) {
+        if(fmt[i] == '{' and fmt[i+1] == '}') {
+            put(args[args_i]);
+            args_i = args_i + 1;
+            i = i + 1;
+        } else {
+            put(fmt[i]);
+        }
+    }
+    print "";
+}
+
+fun main() {
+    con num = 25;
+    con start = clock();
+
+    con args = [];
+    args[0] = num;
+    args[1] = fib(num);
+    args[2] = clock() - start;
+
+    printf("fib({}) == {}, time: {}", args);
+}
+
+main();

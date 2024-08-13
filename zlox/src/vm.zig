@@ -5,6 +5,7 @@ const std = @import("std");
 const debug = @import("debug.zig");
 const compiler = @import("compiler.zig");
 const Obj = @import("obj.zig").Obj;
+const GC = @import("gc.zig").GC;
 const Callback = @import("vm/callbacks.zig");
 const table = @import("table.zig");
 const hash = @import("hash.zig");
@@ -14,7 +15,7 @@ const vm_native = @import("vm/native.zig");
 pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
-    objects: Obj.List,
+    objects: GC,
     globals: Globals,
     allocator: std.mem.Allocator,
 
@@ -66,9 +67,13 @@ pub const VM = struct {
     }
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
-        var self = @This(){ .globals = Globals.init(allocator), .objects = Obj.List.init(allocator), .allocator = allocator };
+        var self = @This(){ .globals = Globals.init(allocator), .objects = try GC.init(allocator), .allocator = allocator };
+
         try self.defineNative("clock", 0, vm_native.clock);
+        try self.defineNative("put", 1, vm_native.put);
+
         try vm_native.set_start();
+
         return self;
     }
 
@@ -342,7 +347,7 @@ pub const VM = struct {
                 while (true) : (i -= 1) {
                     const fram = self.frames[i];
                     const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.function.chunk.code.data.ptr);
-                    std.debug.print("[line {d}] in {s}\n", .{fram.function.chunk.lines.get(idx) catch 0, fram.function});
+                    std.debug.print("[line {d}] in {s}\n", .{fram.function.chunk.lines.get(idx) catch 1, fram.function});
                     if (i == 0) break;
                 }
                 std.debug.print(fmt ++ "\n", args);

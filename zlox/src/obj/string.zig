@@ -42,9 +42,7 @@ pub const String = packed struct {
         return @ptrCast(self);
     }
     pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = try writer.write("\"");
-        _ = try writer.write(self.slice());
-        _ = try writer.writeAll("\"");
+        _ = try writer.writeAll(self.slice());
     }
     pub fn eql(self: *const Self, other: *const Self) bool {
         return @intFromPtr(self) == @intFromPtr(other);

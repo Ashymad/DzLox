@@ -73,7 +73,7 @@ pub const Token = struct {
     line: i32,
     column: usize,
 
-    pub const Empty = @This(){ .type = ScannerError.EmptyToken, .lexeme = "", .line = -1, .column = 0 };
+    pub const Empty = @This(){ .type = ScannerError.EmptyToken, .lexeme = "", .line = -1, .column = 1 };
 };
 
 pub const Scanner = struct {
@@ -101,7 +101,7 @@ pub const Scanner = struct {
     });
 
     pub fn init(source: []const u8) !@This() {
-        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line_ptr = source.ptr, .line = 0 };
+        return @This(){ .start = source.ptr, .current = source.ptr, .end = source.ptr + source.len, .line_ptr = source.ptr, .line = 1 };
     }
 
     pub fn scanToken(self: *@This()) Token {
@@ -247,7 +247,7 @@ pub const Scanner = struct {
     }
 
     fn column(self: *const @This()) usize {
-        return @intFromPtr(self.start) - @intFromPtr(self.line_ptr);
+        return 1 + @intFromPtr(self.start) - @intFromPtr(self.line_ptr);
     }
 
     fn lexeme(self: *const @This()) []const u8 {

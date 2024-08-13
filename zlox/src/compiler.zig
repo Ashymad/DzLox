@@ -5,6 +5,7 @@ const OP = @import("chunk.zig").OP;
 const Value = @import("value.zig").Value;
 const ValueArray = @import("value.zig").ValueArray;
 const Obj = @import("obj.zig").Obj;
+const GC = @import("gc.zig").GC;
 const debug = @import("debug.zig");
 const Token = scanner.TokenType;
 
@@ -42,7 +43,7 @@ pub fn Compiler(size: comptime_int) type {
         hadError: bool,
         panicMode: bool,
         currentFunction: *Obj.Function,
-        objects: *Obj.List,
+        objects: *GC,
         locals: [size]Local,
         localCount: usize,
         scopeDepth: usize,
@@ -311,7 +312,7 @@ pub fn Compiler(size: comptime_int) type {
             } else if (self.match(Token.NIL)) {
                 return Value.init({});
             } else if (self.match(Token.LEFT_BRACKET)) {
-                return self.parseLiteralTable();
+                return self.parseLiteralListOrTable();
             } else {
                 self.errorAtCurrent("Not a literal value");
                 return error.UnexpectedToken;
@@ -330,11 +331,56 @@ pub fn Compiler(size: comptime_int) type {
             return Value.init(try self.objects.emplace_cast(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
         }
 
-        fn parseLiteralTable(self: *Self) CompilerError!Value {
+        fn parseLiteralListOrTable(self: *Self) CompilerError!Value {
+            if (self.match(Token.RIGHT_BRACKET)) {
+                return Value.init(try self.objects.emplace_cast(.List, {}));
+            } else if (self.match(Token.COLON)) {
+                self.consume(Token.RIGHT_BRACKET, "Expect ']' in empty table literal");
+                return Value.init(try self.objects.emplace_cast(.Table, {}));
+            } else {
+                const firstVal = try self.parseLiteralValue();
+                if (self.match(Token.COLON)) {
+                    return self.parseLiteralTable(firstVal);
+                } else {
+                    return self.parseLiteralList(firstVal);
+                }
+            }
+        }
+
+        fn parseLiteralList(self: *Self, firstVal: Value) CompilerError!Value {
+            var first = true;
+            var list = try self.objects.emplace(.List, {});
+            while (first or !self.match(Token.RIGHT_BRACKET)) {
+                const val = if (!first)
+                    try self.parseLiteralValue()
+                else blk: {
+                    first = false;
+                    break :blk firstVal;
+                };
+                if (val.is(Value.nil)) {
+                    self.errorAtPrevious("Nil cannot be stored in a list");
+                    return error.UnexpectedToken;
+                }
+                try list.push(val, self.objects.allocator);
+                if (self.match(Token.RIGHT_BRACKET))
+                    break;
+                self.consume(Token.COMMA, "Expect ',' after value in list initalizer");
+            }
+            return Value.init(list.cast());
+        }
+
+        fn parseLiteralTable(self: *Self, firstVal: Value) CompilerError!Value {
+            var first = true;
             var tabl = try self.objects.emplace(.Table, {});
-            while (!self.match(Token.RIGHT_BRACKET)) {
-                const key = try self.parseLiteralValue();
-                self.consume(Token.COLON, "Expect ':' after key in table initalizer");
+            while (first or !self.match(Token.RIGHT_BRACKET)) {
+                const key = if (!first) blk: {
+                    const key = try self.parseLiteralValue();
+                    self.consume(Token.COLON, "Expect ':' after key in table initalizer");
+                    break :blk key;
+                } else blk2: {
+                    first = false;
+                    break :blk2 firstVal;
+                };
                 const val = try self.parseLiteralValue();
                 if (val.is(Value.nil)) {
                     self.errorAtPrevious("Nil cannot be stored in a table");
@@ -352,7 +398,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn table(self: *Self, _: bool) void {
-            self.emitConstant(self.parseLiteralTable() catch |err| {
+            self.emitConstant(self.parseLiteralListOrTable() catch |err| {
                 self.lastError = err;
                 return;
             });
@@ -397,12 +443,12 @@ pub fn Compiler(size: comptime_int) type {
         fn resolveLocal(self: *Self, name: scanner.Token) !u8 {
             var i = self.localCount;
             while (i > 0) : (i -= 1) {
-                if(self.locals[i-1].depth) |_| {
-                    if (identifiersEql(self.locals[i-1].name, name)) {
+                if (identifiersEql(self.locals[i-1].name, name)) {
+                    if(self.locals[i-1].depth) |_| {
                         return @intCast(i-1);
+                    } else {
+                        self.errorAt(name, "Can't read local variable in it's own initializer");
                     }
-                } else {
-                    self.errorAt(name, "Can't read local variable in it's own initializer");
                 }
             }
             return error.NotFound;
@@ -778,7 +824,9 @@ pub fn Compiler(size: comptime_int) type {
 
             const exitJump = self.emitJump(OP.JUMP_IF_FALSE);
             self.emitOP(OP.POP);
-            self.statement();
+            if (!self.match(Token.SEMICOLON)) {
+                self.statement();
+            }
             self.emitLoop(loopStart);
 
             self.patchJump(exitJump);
@@ -821,8 +869,9 @@ pub fn Compiler(size: comptime_int) type {
                 loopStart = incrementStart;
                 self.patchJump(bodyJump);
             }
-
-            self.statement();
+            if (!self.match(Token.SEMICOLON)) {
+                self.statement();
+            }
             self.emitLoop(loopStart);
 
             if (exitJump) |jump| {
@@ -931,7 +980,7 @@ pub fn Compiler(size: comptime_int) type {
             self.emitOP(OP.PRINT);
         }
 
-        fn init(scan: *scanner.Scanner, objects: *Obj.List, fun: *Obj.Function) Self {
+        fn init(scan: *scanner.Scanner, objects: *GC, fun: *Obj.Function) Self {
             return Self{
                 .scanner = scan,
                 .current = scanner.Token.Empty,
@@ -947,7 +996,7 @@ pub fn Compiler(size: comptime_int) type {
             };
         }
 
-        pub fn compile(source: []const u8, objects: *Obj.List) CompilerError!*Obj.Function {
+        pub fn compile(source: []const u8, objects: *GC) CompilerError!*Obj.Function {
             var scan = try scanner.Scanner.init(source);
             const fun = try objects.emplace(Obj.Type.Function, Obj.Function.Type.Script);
             var self = Self.init(&scan, objects, fun);

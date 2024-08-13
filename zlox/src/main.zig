@@ -33,9 +33,15 @@ pub fn main() anyerror!u8 {
 pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
+    var VM = try vm.VM.init(allocator);
+    defer VM.deinit();
 
     const text = try file.reader().readAllAlloc(allocator, 999999);
     defer allocator.free(text);
+
+    VM.interpret(text, false) catch |err| {
+        std.debug.print("Error: {}\n", .{err});
+    };
 }
 
 pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {
