@@ -309,15 +309,26 @@ pub const VM = struct {
                             const val = self.pop();
                             const key = self.pop();
                             const obj = self.pop();
-                            if (!obj.is(Obj.Type.Table)) {
+                            if (obj.is(Obj.Type.Table)) {
+                                var m = obj.obj.cast(.Table) catch unreachable;
+                                if (val.is(Value.nil)) {
+                                    m.delete(key);
+                                } else {
+                                    _ = try m.set(key, val);
+                                }
+                            } else if (obj.is(Obj.Type.List)) {
+                                var m = obj.obj.cast(.List) catch unreachable;
+                                if (val.is(Value.nil) and key.eql(Value.init(@as(f64, @floatFromInt(m.len - 1))))) {
+                                    _ = m.pop(self.vm.allocator);
+                                } else {
+                                    m.set(key, val, self.vm.allocator) catch {
+                                        self.runtimeError("Invalid index for a list, has to be a number greater than 0", .{});
+                                        return InterpreterError.RuntimeError;
+                                    };
+                                }
+                            } else {
                                 self.runtimeError("Cannot index a non-table value", .{});
                                 return InterpreterError.RuntimeError;
-                            }
-                            var m = obj.obj.cast(.Table) catch unreachable;
-                            if (val.is(Value.nil)) {
-                                m.delete(key);
-                            } else {
-                                _ = try m.set(key, val);
                             }
                             self.push(val);
                         },

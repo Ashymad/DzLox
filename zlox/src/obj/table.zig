@@ -50,18 +50,26 @@ pub const Table = packed struct {
         const Printer = struct {
             options: std.fmt.FormatOptions,
             writer: @TypeOf(writer),
+            count: usize,
 
-            pub fn print(this: @This(), key: value.Value, val: value.Value) utils.fn_error(@TypeOf(writer).write)!void {
+            pub fn print(this: *@This(), key: value.Value, val: value.Value) utils.fn_error(@TypeOf(writer).write)!void {
+                this.count -= 1;
+
                 try key.format(fmt, this.options, this.writer);
                 _ = try this.writer.write(":");
                 try val.format(fmt, this.options, this.writer);
-                _ = try this.writer.write(",");
+                if (this.count > 0) _ = try this.writer.write(", ");
             }
 
         };
 
+        var printer = Printer{.options = options, .writer = writer, .count = self.table.count};
         _ = try writer.write("[");
-        try self.table.for_each_try(Printer{.options = options, .writer = writer}, Printer.print);
+        if (self.table.count > 0) {
+            try self.table.for_each_try(&printer, Printer.print);
+        } else {
+            _ = try writer.write(":");
+        }
         _ = try writer.writeAll("]");
     }
     pub fn eql(self: *const Self, other: *const Self) bool {
