@@ -320,6 +320,13 @@ pub const VM = struct {
                                 var m = obj.obj.cast(.List) catch unreachable;
                                 if (val.is(Value.nil) and key.eql(Value.init(@as(f64, @floatFromInt(m.len - 1))))) {
                                     _ = m.pop(self.vm.allocator);
+                                    while(m.tip) |t| {
+                                        if (t.val.is(Value.nil)) {
+                                            _ = m.pop(self.vm.allocator);
+                                        } else {
+                                            break;
+                                        }
+                                    }
                                 } else {
                                     m.set(key, val, self.vm.allocator) catch {
                                         self.runtimeError("Invalid index for a list, has to be a number greater than 0", .{});
