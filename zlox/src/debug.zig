@@ -3,7 +3,7 @@ const chunk = @import("chunk.zig");
 const value = @import("value.zig");
 const print = std.debug.print;
 
-pub fn disassembleChunk(ch: chunk.Chunk, name: []const u8) !void {
+pub fn disassembleChunk(ch: *const chunk.Chunk, name: []const u8) !void {
     print("== {s} ==\n", .{name});
 
     var offset: usize = 0;
@@ -13,7 +13,7 @@ pub fn disassembleChunk(ch: chunk.Chunk, name: []const u8) !void {
     }
 }
 
-pub fn disassembleInstruction(ch: chunk.Chunk, offset: usize) !usize {
+pub fn disassembleInstruction(ch: *const chunk.Chunk, offset: usize) !usize {
     const OP = chunk.OP;
     print("{d:0>4} ", .{offset});
     if (offset > 0 and (try ch.lines.get(offset)) == (try ch.lines.get(offset - 1))) {
@@ -67,18 +67,18 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
     return offset + 1;
 }
 
-fn constantInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
+fn constantInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize) !usize {
     const constant = try ch.code.get(offset + 1);
     print("{s:<32} {d:4} '{s}'\n", .{ name, constant, try ch.constants.get(constant)});
     return offset + 2;
 }
 
-fn byteInstruction(name: []const u8, ch: chunk.Chunk, offset: usize) !usize {
+fn byteInstruction(name: []const u8, ch:*const  chunk.Chunk, offset: usize) !usize {
     print("{s:<32} {d:4}\n", .{name, try ch.code.get(offset+1)});
     return offset + 2;
 }
 
-fn jumpInstruction(name: []const u8, sign: bool, ch: chunk.Chunk, offset: usize) !usize {
+fn jumpInstruction(name: []const u8, sign: bool, ch: *const chunk.Chunk, offset: usize) !usize {
     const msb: u16 = try ch.code.get(offset + 1);
     const lsb: u16 = try ch.code.get(offset + 2);
     const jump = (msb << 8) | lsb;

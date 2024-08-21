@@ -12,7 +12,7 @@ const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
 const vm_native = @import("vm/native.zig");
 
-pub const InterpreterError = compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = vm_native.NativeError || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     objects: GC,
@@ -60,19 +60,21 @@ pub const VM = struct {
         }
     };
 
-    fn defineNative(self: *@This(), name: []const u8, arity: u8, fun: Obj.Native.Fn) !void {
+    fn defineNative(self: *@This(), name: []const u8, arity_min: u8, arity_max: u8, fun: Obj.Native.Fn) !void {
         const nameObj = try self.objects.emplace(.String, &.{name});
-        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{.fun = fun, .name = name, .arity = arity});
+        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{.fun = fun, .name = name, .arity_min = arity_min, .arity_max = arity_max});
         _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
     }
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
         var self = @This(){ .globals = Globals.init(allocator), .objects = try GC.init(allocator), .allocator = allocator };
 
-        try self.defineNative("clock", 0, vm_native.clock);
-        try self.defineNative("put", 1, vm_native.put);
+        try self.defineNative("clock", 0, 0, vm_native.Clock.clock);
+        try self.defineNative("put", 1, 1, vm_native.put);
+        try self.defineNative("table", 0, Obj.Native.ArityMax, vm_native.table);
+        try self.defineNative("list", 0, Obj.Native.ArityMax, vm_native.list);
 
-        try vm_native.set_start();
+        try vm_native.Clock.set_start();
 
         return self;
     }
@@ -83,7 +85,7 @@ pub const VM = struct {
 
         const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
-        //try debug.disassembleChunk(chunk, "Main");
+        try debug.disassembleChunk(function.chunk, "Main");
 
         try Interpreter(callstack_size, stack_size).run(self, function, dbg);
     }
@@ -165,11 +167,11 @@ pub const VM = struct {
                     try self.call(callee.obj.cast(.Function) catch unreachable, argCount);
                 } else if(callee.is(Obj.Type.Native)) {
                     const native = callee.obj.cast(.Native) catch unreachable;
-                    if (argCount != native.arity) {
-                        self.runtimeError("Expected {d} arguments but got {d}", .{native.arity, argCount});
+                    if (argCount < native.arity_min or argCount > native.arity_max) {
+                        self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{native.arity_min, native.arity_max, argCount});
                         return InterpreterError.RuntimeError;
                     }
-                    const result = native.call(argCount, self.stackTop - argCount);
+                    const result = try native.call(&self.vm.objects, argCount, self.stackTop - argCount);
                     self.stackTop -= argCount + 1;
                     self.push(result);
                     return;
@@ -214,7 +216,7 @@ pub const VM = struct {
                             std.debug.print("[{s}]", .{stackPtr[0]});
                         }
                         std.debug.print("\n", .{});
-                        _ = try debug.disassembleInstruction(self.frame().function.chunk.*, self.instruction_idx());
+                        _ = try debug.disassembleInstruction(self.frame().function.chunk, self.instruction_idx());
                     }
                     const instruction: u8 = self.read_byte();
                     switch (instruction) {

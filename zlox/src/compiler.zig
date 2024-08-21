@@ -8,6 +8,7 @@ const Obj = @import("obj.zig").Obj;
 const GC = @import("gc.zig").GC;
 const debug = @import("debug.zig");
 const Token = scanner.TokenType;
+const vm_native = @import("vm/native.zig");
 
 pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
@@ -81,7 +82,7 @@ pub fn Compiler(size: comptime_int) type {
                     T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
                     T.LEFT_BRACE    => R(null,       null,      P.NONE ),
                     T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACKET  => R(S.table,    S.index,   P.CALL ),
+                    T.LEFT_BRACKET  => R(S.listTable,S.index,   P.CALL ),
                     T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
                     T.COMMA         => R(null,       null,      P.NONE ),
                     T.DOT           => R(null,       null,      P.NONE ),
@@ -265,15 +266,11 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn string(self: *Self, _: bool) void {
-            self.emitConstant(self.parseLiteralString() catch |err| {
-                self.lastError = err;
-                self.errorAtPrevious("Couldn't allocate object");
-                return;
-            });
+            self.emitObj(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch return;
         }
 
         fn char(self: *Self, _: bool) void {
-            self.emitConstant(self.parseLiteralChar());
+            self.emitConstant(Value.init(self.previous.lexeme[1]));
         }
 
         fn call(self: *Self, _: bool) void {
@@ -298,110 +295,52 @@ pub fn Compiler(size: comptime_int) type {
             return argCount;
         }
 
-        fn parseLiteralValue(self: *Self) CompilerError!Value {
-            if (self.match(Token.STRING)) {
-                return self.parseLiteralString();
-            } else if (self.match(Token.CHAR)) {
-                return self.parseLiteralChar();
-            } else if (self.match(Token.NUMBER)) {
-                return self.parseLiteralNumber();
-            } else if (self.match(Token.FALSE)) {
-                return Value.init(false);
-            } else if (self.match(Token.TRUE)) {
-                return Value.init(true);
-            } else if (self.match(Token.NIL)) {
-                return Value.init({});
-            } else if (self.match(Token.LEFT_BRACKET)) {
-                return self.parseLiteralListOrTable();
-            } else {
-                self.errorAtCurrent("Not a literal value");
-                return error.UnexpectedToken;
-            }
-        }
-
-        fn parseLiteralNumber(self: *Self) !Value {
-            return Value.parseNumber(self.previous.lexeme);
-        }
-
-        fn parseLiteralChar(self: *Self) Value {
-            return Value.init(self.previous.lexeme[1]);
-        }
-
-        fn parseLiteralString(self: *Self) !Value {
-            return Value.init(try self.objects.emplace_cast(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}));
-        }
-
-        fn parseLiteralListOrTable(self: *Self) CompilerError!Value {
-            if (self.match(Token.RIGHT_BRACKET)) {
-                return Value.init(try self.objects.emplace_cast(.List, {}));
-            } else if (self.match(Token.COLON)) {
-                self.consume(Token.RIGHT_BRACKET, "Expect ']' in empty table literal");
-                return Value.init(try self.objects.emplace_cast(.Table, {}));
-            } else {
-                const firstVal = try self.parseLiteralValue();
-                if (self.match(Token.COLON)) {
-                    return self.parseLiteralTable(firstVal);
-                } else {
-                    return self.parseLiteralList(firstVal);
-                }
-            }
-        }
-
-        fn parseLiteralList(self: *Self, firstVal: Value) CompilerError!Value {
-            var first = true;
-            var list = try self.objects.emplace(.List, {});
-            while (first or !self.match(Token.RIGHT_BRACKET)) {
-                const val = if (!first)
-                    try self.parseLiteralValue()
-                else blk: {
-                    first = false;
-                    break :blk firstVal;
-                };
-                if (val.is(Value.nil)) {
-                    self.errorAtPrevious("Nil cannot be stored in a list");
-                    return error.UnexpectedToken;
-                }
-                try list.push(val, self.objects.allocator);
-                if (self.match(Token.RIGHT_BRACKET))
-                    break;
-                self.consume(Token.COMMA, "Expect ',' after value in list initalizer");
-            }
-            return Value.init(list.cast());
-        }
-
-        fn parseLiteralTable(self: *Self, firstVal: Value) CompilerError!Value {
-            var first = true;
-            var tabl = try self.objects.emplace(.Table, {});
-            while (first or !self.match(Token.RIGHT_BRACKET)) {
-                const key = if (!first) blk: {
-                    const key = try self.parseLiteralValue();
-                    self.consume(Token.COLON, "Expect ':' after key in table initalizer");
-                    break :blk key;
-                } else blk2: {
-                    first = false;
-                    break :blk2 firstVal;
-                };
-                const val = try self.parseLiteralValue();
-                if (val.is(Value.nil)) {
-                    self.errorAtPrevious("Nil cannot be stored in a table");
-                    return error.UnexpectedToken;
-                }
-                if (!try tabl.set(key, val)) {
-                    self.errorAtPrevious("Duplicate key in table literal");
-                    return error.UnexpectedToken;
-                }
-                if (self.match(Token.RIGHT_BRACKET))
-                    break;
-                self.consume(Token.COMMA, "Expect ',' after value in table initalizer");
-            }
-            return Value.init(tabl.cast());
-        }
-
-        fn table(self: *Self, _: bool) void {
-            self.emitConstant(self.parseLiteralListOrTable() catch |err| {
+        fn makeObj(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !u8 {
+            return self.makeConstant(Value.init(self.objects.emplace_cast(tp, arg) catch |err| {
                 self.lastError = err;
-                return;
-            });
+                self.errorAtPrevious("Unable to allocate obj");
+                return err;
+            }));
+        }
+        
+        fn emitObj(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !void {
+            self.emit(OP.CONSTANT, try self.makeObj(tp, arg));
+        }
+
+        fn listTable(self: *Self, _: bool) void {
+            self.emit(OP.CONSTANT, 0xff);
+            const offset = self.currentChunk().code.len - 1;
+            var argCount: u8 = 0;
+            var isList = true;
+
+            if (self.match(Token.RIGHT_BRACKET)) {
+            } else if (self.match(Token.COLON)) {
+                isList = false;
+            } else {
+                self.expression();
+                argCount += 1;
+                if (self.match(Token.COLON)) {
+                    isList = false;
+                    self.expression();
+                    argCount += 1;
+                }
+                while(!self.match(Token.RIGHT_BRACKET)) {
+                    self.consume(Token.COMMA, "Expect ',' between expressions");
+                    self.expression();
+                    argCount += 1;
+                    if(!isList) {
+                        self.consume(Token.COLON, "Expect ':' between key and value");
+                        self.expression();
+                        argCount += 1;
+                    }
+                }
+            }
+            if (isList) {
+                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{.name = "internal::list", .fun = vm_native.list}) catch return) catch return;
+            } else {
+                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{.name = "internal::table", .fun = vm_native.table}) catch return) catch return;
+            }
+            self.emit(OP.CALL, argCount);
         }
 
         fn index(self: *Self, canAssign: bool) void {
@@ -749,51 +688,46 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn switchStatement(self: *Self) void {
+            var defaultPresent = false;
+            var argCount: u8 = 0;
+
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            var tabl = self.objects.emplace(.Table, {}) catch |err| {
-                self.lastError = err;
-                return;
-            };
-            self.emitConstant(Value.init(tabl.cast()));
-
+            self.emitObj(.Native, Obj.Native.Arg{.name = "switch", .fun = vm_native.table}) catch return;
+            
+            var jumpOver = self.emitJump(OP.JUMP);
+            const switchExpression = self.currentChunk().code.len;
             self.expression();
 
             self.consume(Token.RIGHT_PAREN, "Expect ')' after expression");
 
             self.emitOP(OP.GET_INDEX);
             const defaultJump = self.emitJump(OP.JUMP_IF_FALSE);
-            var defaultPresent = false;
             self.emitOP(OP.JUMP_POP);
             const switchJump = self.currentChunk().code.len;
             const exitJump = self.emitJump(OP.JUMP);
+
+            self.patchJump(jumpOver);
 
             self.consume(Token.LEFT_BRACE, "Expect '{' after switch()");
 
             while(!self.match(Token.RIGHT_BRACE)) {
                 if (self.match(Token.CASE)) {
-                    const case = self.parseLiteralValue() catch |err| {
-                        self.lastError = err;
-                        return;
-                    };
-                    const distance = self.currentChunk().code.len - switchJump;
+                    self.expression();
+                    argCount += 2;
+                    const distance = self.currentChunk().code.len - switchJump + 5;
                     if (distance > std.math.maxInt(u52)) {
                         self.errorAtCurrent("Switch body too large");
                         return;
                     }
-                    const isNew = tabl.set(case, Value.init(@as(Value.tagType(.number), @floatFromInt(distance)))) catch |err| {
-                        self.lastError = err;
-                        return;
-                    };
-                    if (!isNew) {
-                        self.errorAtCurrent("Duplicate case");
-                        return;
-                    }
+                    self.emitConstant(Value.init(@as(Value.tagType(.number), @floatFromInt(distance))));
+                    jumpOver = self.emitJump(OP.JUMP);
                 } else if (self.match(Token.DEFAULT)) {
                     if (defaultPresent) {
                         self.errorAtCurrent("Duplicate default");
                         return;
                     }
+                    jumpOver = self.emitJump(OP.JUMP);
                     self.patchJump(defaultJump);
                     self.emitOP(OP.POP);
                     defaultPresent = true;
@@ -804,7 +738,10 @@ pub fn Compiler(size: comptime_int) type {
                 self.consume(Token.COLON, "Expect ':' after case");
                 self.statement();
                 self.emitLoop(switchJump);
+                self.patchJump(jumpOver);
             }
+            self.emit(OP.CALL, argCount);
+            self.emitLoop(switchExpression);
 
             if (!defaultPresent) {
                 self.patchJump(defaultJump);
