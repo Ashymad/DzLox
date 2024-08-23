@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const utils = @import("../comptime_utils.zig");
 const Super = @import("../obj.zig").Obj;
 const Error = Super.Error;
 
@@ -15,7 +16,7 @@ pub const Template = packed struct {
         return error.OutOfMemory;
     }
 
-    pub fn cast(self: *Self) *Super {
+    pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
         return @ptrCast(self);
     }
 

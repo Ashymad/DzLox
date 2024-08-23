@@ -79,23 +79,14 @@ pub fn Compiler(size: comptime_int) type {
                 v.* = switch (tok) {
                     // zig fmt: off
                     T.LEFT_PAREN    => R(S.grouping, S.call,    P.CALL ),
-                    T.RIGHT_PAREN   => R(null,       null,      P.NONE ),
-                    T.LEFT_BRACE    => R(null,       null,      P.NONE ),
-                    T.RIGHT_BRACE   => R(null,       null,      P.NONE ),
                     T.LEFT_BRACKET  => R(S.listTable,S.index,   P.CALL ),
-                    T.RIGHT_BRACKET => R(null,       null,      P.NONE ),
-                    T.COMMA         => R(null,       null,      P.NONE ),
-                    T.DOT           => R(null,       null,      P.NONE ),
                     T.MINUS         => R(S.unary,    S.binary,  P.TERM ),
                     T.PLUS          => R(null,       S.binary,  P.TERM ),
-                    T.COLON         => R(null,       null,      P.NONE ),
-                    T.SEMICOLON     => R(null,       null,      P.NONE ),
                     T.SLASH         => R(null,       S.binary,  P.FACTOR ),
                     T.STAR          => R(null,       S.binary,  P.FACTOR ),
                     T.QUESTION      => R(null,       S.ternary, P.TERNARY ),
                     T.BANG          => R(S.unary,    null,      P.NONE ),
                     T.BANG_EQUAL    => R(null,       S.binary,  P.EQUALITY ),
-                    T.EQUAL         => R(null,       null,      P.NONE ),
                     T.EQUAL_EQUAL   => R(null,       S.binary,  P.EQUALITY ),
                     T.GREATER       => R(null,       S.binary,  P.COMPARISON ),
                     T.GREATER_EQUAL => R(null,       S.binary,  P.COMPARISON ),
@@ -106,26 +97,11 @@ pub fn Compiler(size: comptime_int) type {
                     T.CHAR          => R(S.char,     null,      P.NONE ),
                     T.NUMBER        => R(S.number,   null,      P.NONE ),
                     T.AND           => R(null,       S._and,    P.AND ),
-                    T.CLASS         => R(null,       null,      P.NONE ),
-                    T.ELSE          => R(null,       null,      P.NONE ),
                     T.FALSE         => R(S.literal,  null,      P.NONE ),
-                    T.FOR           => R(null,       null,      P.NONE ),
-                    T.FUN           => R(null,       null,      P.NONE ),
-                    T.IF            => R(null,       null,      P.NONE ),
                     T.NIL           => R(S.literal,  null,      P.NONE ),
                     T.OR            => R(null,       S._or,     P.OR ),
-                    T.PRINT         => R(null,       null,      P.NONE ),
-                    T.RETURN        => R(null,       null,      P.NONE ),
-                    T.SUPER         => R(null,       null,      P.NONE ),
-                    T.THIS          => R(null,       null,      P.NONE ),
                     T.TRUE          => R(S.literal,  null,      P.NONE ),
-                    T.VAR           => R(null,       null,      P.NONE ),
-                    T.CON           => R(null,       null,      P.NONE ),
-                    T.WHILE         => R(null,       null,      P.NONE ),
-                    T.SWITCH        => R(null,       null,      P.NONE ),
-                    T.CASE          => R(null,       null,      P.NONE ),
-                    T.DEFAULT       => R(null,       null,      P.NONE ),
-                    T.EOF           => R(null,       null,      P.NONE ),
+                    else            => R(null,       null,      P.NONE ),
                     // zig fmt: on
                 };
             }
@@ -543,7 +519,7 @@ pub fn Compiler(size: comptime_int) type {
             if (compiler.hadError) {
                 self.lastError = compiler.lastError;
             } else {
-                self.emit(OP.CONSTANT, self.makeConstant(Value.init(compiler.end().cast())));
+                self.emit(OP.CLOSURE, self.makeConstant(Value.init(compiler.end().cast())));
             }
         }
 

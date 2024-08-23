@@ -28,7 +28,8 @@ pub const Table = packed struct {
         self.table.* = Self.Table.init(allocator);
         return self;
     }
-    pub fn cast(self: *Self) *Super {
+
+    pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
         return @ptrCast(self);
     }
 

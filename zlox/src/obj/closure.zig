@@ -1,38 +1,25 @@
 const std = @import("std");
-const chunk = @import("../chunk.zig");
 const utils = @import("../comptime_utils.zig");
 
 const Super = @import("../obj.zig").Obj;
 const Error = Super.Error;
-const String = Super.String;
 
-pub const Function = packed struct {
+pub const Closure = packed struct {
     const Self = @This();
-    pub const Arg = Type;
 
-    pub const Type = enum(u8) {
-        Function,
-        Script
-    };
+    pub const Arg = *const Super.Function;
 
     obj: Super,
-    arity: u8,
-    chunk: *chunk.Chunk,
-    name: ?*const String,
-    type: Type,
+    function: *const Super.Function,
 
-    pub fn init(tp: Arg, allocator: std.mem.Allocator) Error!*Self {
+    pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
             .obj = Super{
-                .type = Super.Type.Function,
+                .type = Super.Type.Closure,
             },
-            .chunk = try allocator.create(chunk.Chunk),
-            .arity = 0,
-            .name = null,
-            .type = tp,
+            .function = arg,
         };
-        self.chunk.* = try chunk.Chunk.init(allocator);
         return self;
     }
 
@@ -41,11 +28,8 @@ pub const Function = packed struct {
     }
 
     pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        switch(self.type) {
-            .Function => _ = try writer.write("<F: "),
-            .Script => _ = try writer.write("<S: "),
-        }
-        if (self.name) |name| {
+        _ = try writer.write("<C: ");
+        if (self.function.name) |name| {
             _ = try writer.write(name.slice());
         } else {
             _ = try writer.write("-");
@@ -58,9 +42,6 @@ pub const Function = packed struct {
     }
 
     pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
-        self.chunk.deinit();
-        allocator.destroy(self.chunk);
         allocator.destroy(self);
     }
-
 };

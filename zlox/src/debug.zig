@@ -55,6 +55,7 @@ pub fn disassembleInstruction(ch: *const chunk.Chunk, offset: usize) !usize {
         @intFromEnum(OP.SET_INDEX) => simpleInstruction(name, offset),
         @intFromEnum(OP.GET_INDEX) => simpleInstruction(name, offset),
         @intFromEnum(OP.CALL) => simpleInstruction(name, offset),
+        @intFromEnum(OP.CLOSURE) => try closureInstruction(name, ch, offset),
         else => blk: {
             print("Unknown opcode {d} {s}\n", .{op, name});
             break :blk offset + 1;
@@ -85,4 +86,10 @@ fn jumpInstruction(name: []const u8, sign: bool, ch: *const chunk.Chunk, offset:
 
     print("{s:<32} {d:4} -> {d}\n", .{name, offset, if (sign) offset + 3 + jump else offset + 3 - jump});
     return offset + 3;
+}
+
+fn closureInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize) !usize {
+    const constant = try ch.code.get(offset + 1);
+    print("{s:<32} {d:4} '{s}'\n", .{ name, constant, try ch.constants.get(constant)});
+    return offset + 2;
 }

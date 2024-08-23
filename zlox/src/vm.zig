@@ -47,15 +47,26 @@ pub const VM = struct {
     const Globals = table.Table(*const Obj.String, Global, hash.hash_t(*const Obj.String), Obj.String.eql);
 
     const CallFrame = struct {
-        function: *const Obj.Function,
+        callee: *const Obj,
         ip: [*]const u8,
         slots: [*]Value,
+        chunk: *const Chunk,
 
-        pub fn init(function: *const Obj.Function, slots: [*]Value) @This() {
-            return @This() {
-                .function = function,
-                .ip = function.chunk.code.data.ptr,
-                .slots = slots
+        pub fn init(comptime tp: Obj.Type, callee: *const tp.get(), slots: [*]Value) @This() {
+            return switch(tp) {
+                .Function => @This() {
+                    .callee = callee.cast(),
+                    .ip = callee.chunk.code.data.ptr,
+                    .chunk = callee.chunk,
+                    .slots = slots
+                },
+                .Closure => @This() {
+                    .callee = callee.cast(),
+                    .ip = callee.function.chunk.code.data.ptr,
+                    .chunk = callee.function.chunk,
+                    .slots = slots
+                },
+                else => @compileError("Invalid type")
             };
         }
     };
@@ -107,7 +118,7 @@ pub const VM = struct {
                     .vm = vm
                 };
                 self.stackTop = &self.stack;
-                self.frames[0] = CallFrame.init(function, self.stackTop);
+                self.frames[0] = CallFrame.init(.Function, function, self.stackTop);
                 self.push(Value.init(function.cast()));
                 try self.execute(dbg);
             }
@@ -141,7 +152,7 @@ pub const VM = struct {
             }
 
             fn read_constant(self: *@This()) Value {
-                return self.frame().function.chunk.constants.get(self.read_byte()) catch unreachable;
+                return self.frame().chunk.constants.get(self.read_byte()) catch unreachable;
             }
 
             fn read_string(self: *@This()) *const Obj.String {
@@ -164,24 +175,30 @@ pub const VM = struct {
 
             fn callValue(self: *@This(), callee: Value, argCount: u8) !void {
                 if(callee.is(Obj.Type.Function)) {
-                    try self.call(callee.obj.cast(.Function) catch unreachable, argCount);
+                    try self.callFunction(callee.obj.cast(.Function) catch unreachable, argCount);
+                } else if(callee.is(Obj.Type.Closure)) {
+                    try self.callClosure(callee.obj.cast(.Closure) catch unreachable, argCount);
                 } else if(callee.is(Obj.Type.Native)) {
-                    const native = callee.obj.cast(.Native) catch unreachable;
-                    if (argCount < native.arity_min or argCount > native.arity_max) {
-                        self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{native.arity_min, native.arity_max, argCount});
-                        return InterpreterError.RuntimeError;
-                    }
-                    const result = try native.call(&self.vm.objects, argCount, self.stackTop - argCount);
-                    self.stackTop -= argCount + 1;
-                    self.push(result);
-                    return;
+                    try self.callNative(callee.obj.cast(.Native) catch unreachable, argCount);
                 } else {
                     self.runtimeError("Can only call functions and classes", .{});
                     return InterpreterError.RuntimeError;
                 }
             }
 
-            fn call(self: *@This(), callee: *Obj.Function, argCount: u8) !void {
+            fn callClosure(self: *@This(), callee: *Obj.Closure, argCount: u8) !void {
+                if (argCount != callee.function.arity) {
+                    self.runtimeError("Expected {d} arguments but got {d}", .{callee.function.arity, argCount});
+                    return InterpreterError.RuntimeError;
+                }
+                if (self.frameCount == callstack_size - 1)
+                    return InterpreterError.StackOverflow;
+                self.frameCount += 1;
+                self.frames[self.frameCount - 1] = CallFrame.init(.Closure, callee, self.stackTop - argCount - 1);
+            }
+
+
+            fn callFunction(self: *@This(), callee: *Obj.Function, argCount: u8) !void {
                 if (argCount != callee.arity) {
                     self.runtimeError("Expected {d} arguments but got {d}", .{callee.arity, argCount});
                     return InterpreterError.RuntimeError;
@@ -189,7 +206,18 @@ pub const VM = struct {
                 if (self.frameCount == callstack_size - 1)
                     return InterpreterError.StackOverflow;
                 self.frameCount += 1;
-                self.frames[self.frameCount - 1] = CallFrame.init(callee, self.stackTop - argCount - 1);
+                self.frames[self.frameCount - 1] = CallFrame.init(.Function, callee, self.stackTop - argCount - 1);
+            }
+
+            fn callNative(self: *@This(), native: *Obj.Native, argCount: u8) !void {
+                if (argCount < native.arity_min or argCount > native.arity_max) {
+                    self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{native.arity_min, native.arity_max, argCount});
+                    return InterpreterError.RuntimeError;
+                }
+                const result = try native.call(&self.vm.objects, argCount, self.stackTop - argCount);
+                self.stackTop -= argCount + 1;
+                self.push(result);
+                return;
             }
 
             fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
@@ -204,7 +232,7 @@ pub const VM = struct {
             }
 
             fn instruction_idx(self: *const @This()) usize {
-                return @intFromPtr(self.ip()) - @intFromPtr(self.frame().function.chunk.code.data.ptr);
+                return @intFromPtr(self.ip()) - @intFromPtr(self.frame().chunk.code.data.ptr);
             }
 
             fn execute(self: *@This(), dbg: bool) !void {
@@ -216,7 +244,7 @@ pub const VM = struct {
                             std.debug.print("[{s}]", .{stackPtr[0]});
                         }
                         std.debug.print("\n", .{});
-                        _ = try debug.disassembleInstruction(self.frame().function.chunk, self.instruction_idx());
+                        _ = try debug.disassembleInstruction(self.frame().chunk, self.instruction_idx());
                     }
                     const instruction: u8 = self.read_byte();
                     switch (instruction) {
@@ -295,7 +323,7 @@ pub const VM = struct {
                             var pushed = false;
                             if (obj.is(Value.obj)) {
                                 switch(obj.obj.type) {
-                                    .Function, .Native => {},
+                                    .Function, .Native, .Closure => {},
                                     inline else => |tp| {
                                         self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
                                         pushed = true;
@@ -345,6 +373,10 @@ pub const VM = struct {
                             const argCount = self.read_byte();
                             try self.callValue(self.peek(argCount), argCount);
                         },
+                        @intFromEnum(OP.CLOSURE) => {
+                            const function = try self.read_constant().obj.cast(.Function);
+                            self.push(Value.init(try self.vm.objects.emplace_cast(.Closure, function)));
+                        },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
                         @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
@@ -366,8 +398,8 @@ pub const VM = struct {
                 var i = self.frameCount - 1;
                 while (true) : (i -= 1) {
                     const fram = self.frames[i];
-                    const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.function.chunk.code.data.ptr);
-                    std.debug.print("[line {d}] in {s}\n", .{fram.function.chunk.lines.get(idx) catch 1, fram.function});
+                    const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.chunk.code.data.ptr);
+                    std.debug.print("[line {d}] in {s}\n", .{fram.chunk.lines.get(idx) catch 1, fram.callee});
                     if (i == 0) break;
                 }
                 std.debug.print(fmt ++ "\n", args);

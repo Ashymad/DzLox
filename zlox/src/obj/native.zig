@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const utils = @import("../comptime_utils.zig");
 const GC = @import("../gc.zig").GC;
 const Value = @import("../value.zig").Value;
 const Super = @import("../obj.zig").Obj;
@@ -47,7 +48,7 @@ pub const Native = packed struct {
         return self.fun(gc, args[0..argCount]);
     }
 
-    pub fn cast(self: *Self) *Super {
+    pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
         return @ptrCast(self);
     }
 

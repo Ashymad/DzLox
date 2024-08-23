@@ -38,9 +38,11 @@ pub const String = packed struct {
     pub fn slice(self: *const Self) []const u8 {
         return self.data()[0..self.len];
     }
-    pub fn cast(self: *Self) *Super {
+
+    pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
         return @ptrCast(self);
     }
+
     pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         _ = try writer.writeAll(self.slice());
     }
