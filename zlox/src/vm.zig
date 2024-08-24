@@ -220,6 +220,10 @@ pub const VM = struct {
                 return;
             }
 
+            fn captureUpvalue(self: *@This(), local: *Value) !*Obj.Upvalue {
+                return self.vm.objects.emplace(.Upvalue, local);
+            }
+
             fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
                 const b = self.pop();
                 const a = self.pop();
@@ -317,13 +321,21 @@ pub const VM = struct {
                                 return InterpreterError.RuntimeError;
                             }
                         },
+                        @intFromEnum(OP.GET_UPVALUE) => {
+                            const closure = try self.frame().callee.cast(.Closure);
+                            self.push(closure.upvalues[self.read_byte()].?.location.*);
+                        },
+                        @intFromEnum(OP.SET_UPVALUE) => {
+                            const closure = try self.frame().callee.cast(.Closure);
+                            closure.upvalues[self.read_byte()].?.location.* = self.peek(0);
+                        },
                         @intFromEnum(OP.GET_INDEX) => {
                             const key = self.pop();
                             const obj = self.pop();
                             var pushed = false;
                             if (obj.is(Value.obj)) {
                                 switch(obj.obj.type) {
-                                    .Function, .Native, .Closure => {},
+                                    .Function, .Native, .Closure, .Upvalue => {},
                                     inline else => |tp| {
                                         self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
                                         pushed = true;
@@ -375,7 +387,16 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.CLOSURE) => {
                             const function = try self.read_constant().obj.cast(.Function);
-                            self.push(Value.init(try self.vm.objects.emplace_cast(.Closure, function)));
+                            const closure = try self.vm.objects.emplace(.Closure, function);
+                            for(closure.upvalues[0..closure.upvalues_len]) |*upvalue| {
+                                if(self.read_byte() == 1) {
+                                    upvalue.* = try self.captureUpvalue(&self.frame().slots[self.read_byte()]);
+                                } else {
+                                    const callee = try self.frame().callee.cast(.Closure);
+                                    upvalue.* = callee.upvalues[self.read_byte()];
+                                }
+                            }
+                            self.push(Value.init(closure.cast()));
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),

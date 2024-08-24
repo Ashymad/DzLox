@@ -11,6 +11,8 @@ pub const Closure = packed struct {
 
     obj: Super,
     function: *const Super.Function,
+    upvalues: [*]?*Super.Upvalue,
+    upvalues_len: u8,
 
     pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
@@ -18,8 +20,12 @@ pub const Closure = packed struct {
             .obj = Super{
                 .type = Super.Type.Closure,
             },
+            .upvalues = (try allocator.alloc(?*Super.Upvalue, arg.upvalue_count)).ptr,
+            .upvalues_len = arg.upvalue_count,
             .function = arg,
         };
+        for(self.upvalues[0..self.upvalues_len])
+            |*upvalue| upvalue.* = null;
         return self;
     }
 
@@ -42,6 +48,7 @@ pub const Closure = packed struct {
     }
 
     pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
+        allocator.free(self.upvalues[0..self.upvalues_len]);
         allocator.destroy(self);
     }
 };

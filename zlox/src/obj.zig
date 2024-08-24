@@ -14,6 +14,7 @@ pub const Obj = packed struct {
     pub const Function = @import("obj/function.zig").Function;
     pub const Native = @import("obj/native.zig").Native;
     pub const Closure = @import("obj/closure.zig").Closure;
+    pub const Upvalue = @import("obj/upvalue.zig").Upvalue;
 
     pub const Type = enum(u8) {
         String,
@@ -22,6 +23,7 @@ pub const Obj = packed struct {
         Native,
         List,
         Closure,
+        Upvalue,
 
         pub fn get(comptime self: @This()) type {
             return @field(Super, @tagName(self));

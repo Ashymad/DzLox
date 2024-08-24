@@ -20,6 +20,7 @@ pub const Function = packed struct {
     chunk: *chunk.Chunk,
     name: ?*const String,
     type: Type,
+    upvalue_count: u8,
 
     pub fn init(tp: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
@@ -31,6 +32,7 @@ pub const Function = packed struct {
             .arity = 0,
             .name = null,
             .type = tp,
+            .upvalue_count = 0,
         };
         self.chunk.* = try chunk.Chunk.init(allocator);
         return self;

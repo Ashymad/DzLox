@@ -48,8 +48,16 @@ pub fn Compiler(size: comptime_int) type {
         locals: [size]Local,
         localCount: usize,
         scopeDepth: usize,
+        enclosing: ?*Self,
+        upvalues: [upvalues_size]Upvalue,
 
         const Self = @This();
+
+        pub const Upvalue = struct {
+            index: u8,
+            isLocal: bool,
+        };
+        const upvalues_size = std.math.maxInt(u8);
 
         const Local = struct {
             name: scanner.Token,
@@ -335,27 +343,60 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn namedVariable(self: *Self, tok: scanner.Token, canAssign: bool) void {
-            var getOP = OP.GET_LOCAL;
-            var setOP = OP.SET_LOCAL;
-            const arg = self.resolveLocal(tok) catch blk: {
-                getOP = OP.GET_GLOBAL;
-                setOP = OP.SET_GLOBAL;
-                break :blk self.identifierConstant(tok) catch return;
-            };
+            const OPs: struct {get: OP, set: OP, arg: u8} = if (self.resolveLocal(tok)) |arg|
+                .{.get = OP.GET_LOCAL, .set = OP.SET_LOCAL, .arg = arg}
+            else if (self.resolveUpvalue(tok)) |arg|
+                .{.get = OP.GET_UPVALUE, .set = OP.SET_UPVALUE, .arg = arg}
+            else
+                .{.get = OP.GET_GLOBAL, .set = OP.SET_GLOBAL, .arg = self.identifierConstant(tok) catch return};
 
             if (canAssign and self.match(Token.EQUAL)) {
-                if(setOP == OP.SET_LOCAL and self.locals[arg].con) {
+                if(OPs.get == OP.GET_LOCAL and self.locals[OPs.arg].con) {
                     self.errorAtPrevious("Cannot assign to a constant");
                     return;
                 }
                 self.expression();
-                self.emit(setOP, arg);
+                self.emit(OPs.set, OPs.arg);
             } else {
-                self.emit(getOP, arg);
+                self.emit(OPs.get, OPs.arg);
             }
         }
 
-        fn resolveLocal(self: *Self, name: scanner.Token) !u8 {
+        fn resolveUpvalue(self: *Self, name: scanner.Token) ?u8 {
+            if (self.enclosing) |enclosing| {
+                std.debug.print("Resolving '{s}' in '{s}'\n", .{name.lexeme, enclosing.currentFunction});
+                if (enclosing.resolveLocal(name)) |local| {
+                    return self.addUpvalue(local, true) catch null;
+                } else if (enclosing.resolveUpvalue(name)) |upvalue| {
+                    return self.addUpvalue(upvalue, false) catch null;
+                }
+            } 
+            return null;
+        }
+        
+        fn addUpvalue(self: *Self, idx: u8, isLocal: bool) !u8 {
+            const count = self.currentFunction.upvalue_count;
+
+            for (self.upvalues[0..count], 0..) |upvalue, i| {
+                if (upvalue.index == idx and upvalue.isLocal == isLocal) {
+                    std.debug.print("Found existing at {d}\n", .{i});
+                    return @intCast(i);
+                }
+            }
+
+            if (count == upvalues_size) {
+                self.errorAtPrevious("Too many upvalues");
+                self.lastError = error.OutOfMemory;
+                return self.lastError;
+            }
+
+            std.debug.print("New {s} upvalue in {s} idx {d} at {d} \n", .{if (isLocal) "local" else "upvalue", self.currentFunction, idx, count});
+            self.upvalues[count] = .{.index = idx, .isLocal = isLocal};
+            self.currentFunction.upvalue_count += 1;
+            return count;
+        }
+
+        fn resolveLocal(self: *Self, name: scanner.Token) ?u8 {
             var i = self.localCount;
             while (i > 0) : (i -= 1) {
                 if (identifiersEql(self.locals[i-1].name, name)) {
@@ -366,7 +407,7 @@ pub fn Compiler(size: comptime_int) type {
                     }
                 }
             }
-            return error.NotFound;
+            return null;
         }
 
         fn emitConstant(self: *Self, val: Value) void {
@@ -493,9 +534,7 @@ pub fn Compiler(size: comptime_int) type {
                 return;
             };
 
-            var compiler = Self.init(self.scanner, self.objects, fun);
-            compiler.current = self.current;
-            compiler.beginScope();
+            var compiler = Self.init_enclosed(self, fun);
 
             compiler.consume(Token.LEFT_PAREN, "Expect '(' after function name");
             if (!compiler.check(Token.RIGHT_PAREN)) {
@@ -518,8 +557,15 @@ pub fn Compiler(size: comptime_int) type {
 
             if (compiler.hadError) {
                 self.lastError = compiler.lastError;
+            } else if (compiler.currentFunction.upvalue_count == 0) {
+                self.emit(OP.CONSTANT, self.makeConstant(Value.init(compiler.end().cast())));
             } else {
                 self.emit(OP.CLOSURE, self.makeConstant(Value.init(compiler.end().cast())));
+
+                for (compiler.upvalues[0..compiler.currentFunction.upvalue_count]) |upvalue| {
+                    self.emitByte(if (upvalue.isLocal) 1 else 0);
+                    self.emitByte(upvalue.index);
+                }
             }
         }
 
@@ -906,7 +952,17 @@ pub fn Compiler(size: comptime_int) type {
                 .locals = [_]Local{Local{.name = scanner.Token.Empty, .depth = 0, .con = true}} ** size,
                 .localCount = 1,
                 .scopeDepth = 0,
+                .enclosing = null,
+                .upvalues = [_]Upvalue{Upvalue{.index = 0, .isLocal = false}} ** upvalues_size,
             };
+        }
+
+        fn init_enclosed(enclosing: *Self, fun: *Obj.Function) Self {
+            var enclosed =  Self.init(enclosing.scanner, enclosing.objects, fun);
+            enclosed.current = enclosing.current;
+            enclosed.enclosing = enclosing;
+            enclosed.beginScope();
+            return enclosed;
         }
 
         pub fn compile(source: []const u8, objects: *GC) CompilerError!*Obj.Function {
