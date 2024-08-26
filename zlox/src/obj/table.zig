@@ -15,6 +15,7 @@ pub const Table = packed struct {
     obj: Super,
     table: *Self.Table,
     hash: u32,
+    len: usize,
 
     pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
@@ -24,6 +25,7 @@ pub const Table = packed struct {
             },
             .table = try allocator.create(Self.Table),
             .hash = 0,
+            .len = 0,
         };
         self.table.* = Self.Table.init(allocator);
         return self;
@@ -35,6 +37,7 @@ pub const Table = packed struct {
 
     pub fn set(self: *Self, key: Value, val: Value) Error!bool {
         self.hash +%= hash.hash(key) +% hash.hash(val);
+        self.len += 1;
         return self.table.set(key, val);
     }
 
@@ -45,7 +48,7 @@ pub const Table = packed struct {
     pub fn delete(self: *Self, key: Value) void {
         const val = self.table.get(key) catch return;
         self.hash -%= hash.hash(key) -% hash.hash(val);
-        _ = self.table.delete(key);
+        if (self.table.delete(key)) self.len -= 1;
     }
 
     pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -65,7 +68,7 @@ pub const Table = packed struct {
 
         };
 
-        var printer = Printer{.options = options, .writer = writer, .count = self.table.count};
+        var printer = Printer{.options = options, .writer = writer, .count = self.len};
         _ = try writer.write("[");
         if (self.table.count > 0) {
             try self.table.for_each_try(&printer, Printer.print);
