@@ -4,7 +4,7 @@ const value = @import("value.zig");
 const Obj = @import("obj.zig").Obj;
 const print = std.debug.print;
 
-const Error = error{OutOfMemory, KeyError, IllegalCastError, NotFound, IndexOutOfBounds};
+const Error = Obj.Error;
 
 pub fn disassembleChunk(ch: *const chunk.Chunk, name: []const u8) Error!void {
     print("/= {s} =\\\n", .{name});

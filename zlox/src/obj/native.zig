@@ -4,13 +4,12 @@ const utils = @import("../comptime_utils.zig");
 const GC = @import("../gc.zig").GC;
 const Value = @import("../value.zig").Value;
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
-
-pub const NativeError = error { NativeError };
 
 pub const Native = packed struct {
     const Self = @This();
-    pub const Fn = *const fn (*GC, []const Value) NativeError!Value;
+    pub const Error = error { OutOfMemory, Native };
+
+    pub const Fn = *const fn (*GC, []const Value) Error!Value;
 
     pub const ArityMin = 0;
     pub const ArityMax = std.math.maxInt(u8);
@@ -44,7 +43,7 @@ pub const Native = packed struct {
         return self;
     }
 
-    pub fn call(self: *const Self, gc: *GC, argCount: u8, args: [*]Value) NativeError!Value {
+    pub fn call(self: *const Self, gc: *GC, argCount: u8, args: [*]Value) Error!Value {
         return self.fun(gc, args[0..argCount]);
     }
 

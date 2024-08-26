@@ -2,12 +2,12 @@ const std = @import("std");
 const utils = @import("../comptime_utils.zig");
 
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
 
 pub const Closure = packed struct {
     const Self = @This();
 
     pub const Arg = *const Super.Function;
+    pub const Error = error { OutOfMemory };
 
     obj: Super,
     function: *const Super.Function,

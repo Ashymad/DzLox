@@ -1,16 +1,16 @@
 const std = @import("std");
 const table = @import("../table.zig");
 const hash = @import("../hash.zig");
-const value = @import("../value.zig");
+const Value = @import("../value.zig").Value;
 const utils = @import("../comptime_utils.zig");
 
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
 
 pub const Table = packed struct {
     const Self = @This();
     pub const Arg = void;
-    const Table = table.Table(value.Value, value.Value, hash.hash_t(value.Value), value.Value.eql);
+    const Table = table.Table(Value, Value, hash.hash_t(Value), Value.eql);
+    pub const Error = error { OutOfMemory } || Self.Table.Error;
 
     obj: Super,
     table: *Self.Table,
@@ -33,27 +33,28 @@ pub const Table = packed struct {
         return @ptrCast(self);
     }
 
-    pub fn set(self: *Self, key: value.Value, val: value.Value) !bool {
+    pub fn set(self: *Self, key: Value, val: Value) Error!bool {
         self.hash +%= hash.hash(key) +% hash.hash(val);
         return self.table.set(key, val);
     }
 
-    pub fn get(self: *Self, key: value.Value) !value.Value {
+    pub fn get(self: *Self, key: Value) Error!Value {
         return self.table.get(key);
     }
 
-    pub fn delete(self: *Self, key: value.Value) void {
+    pub fn delete(self: *Self, key: Value) void {
         const val = self.table.get(key) catch return;
         self.hash -%= hash.hash(key) -% hash.hash(val);
         _ = self.table.delete(key);
     }
+
     pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         const Printer = struct {
             options: std.fmt.FormatOptions,
             writer: @TypeOf(writer),
             count: usize,
 
-            pub fn print(this: *@This(), key: value.Value, val: value.Value) utils.fn_error(@TypeOf(writer).write)!void {
+            pub fn print(this: *@This(), key: Value, val: Value) utils.fn_error(@TypeOf(writer).write)!void {
                 this.count -= 1;
 
                 try key.format(fmt, this.options, this.writer);
@@ -73,13 +74,14 @@ pub const Table = packed struct {
         }
         _ = try writer.writeAll("]");
     }
+
     pub fn eql(self: *const Self, other: *const Self) bool {
-        return self.table.eql(other.table, value.Value.eql);
+        return self.table.eql(other.table, Value.eql);
     }
+
     pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
         self.table.deinit();
         allocator.destroy(self.table);
         allocator.destroy(self);
     }
-
 };

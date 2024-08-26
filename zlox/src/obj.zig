@@ -1,10 +1,8 @@
 const std = @import("std");
 const utils = @import("comptime_utils.zig");
-const TableError = @import("table.zig").TableError;
 
 pub const Obj = packed struct {
     const Super = @This();
-    pub const Error = TableError || error{ OutOfMemory, IllegalCastError, NotFound };
 
     type: Type,
 
@@ -15,6 +13,16 @@ pub const Obj = packed struct {
     pub const Native = @import("obj/native.zig").Native;
     pub const Closure = @import("obj/closure.zig").Closure;
     pub const Upvalue = @import("obj/upvalue.zig").Upvalue;
+
+    pub const Error = error {IllegalCastError}
+        || List.Error
+        || String.Error
+        || Table.Error
+        || Function.Error
+        || Native.Error
+        || List.Error
+        || Closure.Error
+        || Upvalue.Error;
 
     pub const Type = enum(u8) {
         String,

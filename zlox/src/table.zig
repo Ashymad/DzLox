@@ -1,12 +1,12 @@
 const std = @import("std");
 const utils = @import("comptime_utils.zig");
 
-pub const TableError = error{ OutOfMemory, KeyError };
-
 pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type {
     return struct {
         const Self = @This();
         const MaxLoad: f32 = 0.75;
+
+        pub const Error = error{ OutOfMemory, KeyError };
 
         pub const Entry = union(enum) {
             const Some = struct {
@@ -33,7 +33,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
                 10;
         }
 
-        fn adjustCapacity(self: *Self, newsize: usize) TableError!void {
+        fn adjustCapacity(self: *Self, newsize: usize) Error!void {
             const entries = try self.allocator.alloc(Entry, newsize);
             for (entries) |*entry| {
                 entry.* = .none;
@@ -79,7 +79,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             }
         }
 
-        pub fn addAll(self: *Self, other: *const Self) TableError!void {
+        pub fn addAll(self: *Self, other: *const Self) Error!void {
             for (other.entries) |entry| {
                 switch (entry) {
                     .some => |some| self.set(some.key, some.value),
@@ -137,7 +137,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             return true;
         }
 
-        pub fn checkCapacity(self: *Self) TableError!void {
+        pub fn checkCapacity(self: *Self) Error!void {
             const len: f32 = @floatFromInt(self.entries.len);
             const count: f32 = @floatFromInt(self.count);
             if (count + 1.0 > len * MaxLoad) {
@@ -145,40 +145,40 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             }
         }
 
-        pub fn set(self: *Self, key: K, val: V) TableError!bool {
+        pub fn set(self: *Self, key: K, val: V) Error!bool {
             try self.checkCapacity();
             return self.set_(find(self.entries, key), key, val);
         }
 
-        pub fn replace(self: *Self, key: K, val: V) TableError!void {
+        pub fn replace(self: *Self, key: K, val: V) Error!void {
             if (self.entries.len == 0)
-                return TableError.KeyError;
+                return Error.KeyError;
 
             const entry = find(self.entries, key);
             switch (entry.*) {
                 .some => _ = self.set_(entry, key, val),
-                else => return TableError.KeyError,
+                else => return Error.KeyError,
             }
         }
 
-        pub fn replace_if(self: *Self, key: K, val: V, fun: fn (V) bool) TableError!bool {
+        pub fn replace_if(self: *Self, key: K, val: V, fun: fn (V) bool) Error!bool {
             if (self.entries.len == 0)
-                return TableError.KeyError;
+                return Error.KeyError;
 
             const entry = find(self.entries, key);
             switch (entry.*) {
                 .some => |some| return fun(some.value) and !self.set_(entry, key, val),
-                else => return TableError.KeyError,
+                else => return Error.KeyError,
             }
         }
 
-        pub fn get(self: *const Self, key: K) TableError!V {
+        pub fn get(self: *const Self, key: K) Error!V {
             if (self.entries.len == 0)
-                return TableError.KeyError;
+                return Error.KeyError;
 
             return switch (find(self.entries, key).*) {
                 .some => |some| some.value,
-                else => TableError.KeyError,
+                else => Error.KeyError,
             };
         }
 

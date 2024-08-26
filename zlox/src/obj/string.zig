@@ -5,12 +5,12 @@ const utils = @import("../comptime_utils.zig");
 const value = @import("../value.zig");
 
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
 
 pub const String = packed struct {
     const Self = @This();
     pub const Table = table.Table(*Self, void, hash.hash_t(*const Self), Self.eql);
     pub const Arg = []const []const u8;
+    pub const Error = error { OutOfMemory, IndexOutOfBounds } || Table.Error;
 
     obj: Super,
     len: usize = 0,
@@ -49,9 +49,9 @@ pub const String = packed struct {
     pub fn eql(self: *const Self, other: *const Self) bool {
         return @intFromPtr(self) == @intFromPtr(other);
     }
-    pub fn get(self: *const Self, index: value.Value) !value.Value {
+    pub fn get(self: *const Self, index: value.Value) Error!value.Value {
         if (!index.is(value.Value.number) or index.number >= @as(value.Value.tagType(value.Value.number), @floatFromInt(self.len)) or index.number < 0) {
-            return error.KeyError;
+            return Error.IndexOutOfBounds;
         }
         return value.Value.init(self.data()[@intFromFloat(index.number)]);
     }

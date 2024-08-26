@@ -3,12 +3,12 @@ const chunk = @import("../chunk.zig");
 const utils = @import("../comptime_utils.zig");
 
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
 const String = Super.String;
 
 pub const Function = packed struct {
     const Self = @This();
     pub const Arg = Type;
+    pub const Error = error { OutOfMemory };
 
     pub const Type = enum(u8) {
         Function,

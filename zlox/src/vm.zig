@@ -12,7 +12,7 @@ const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
 const vm_native = @import("vm/native.zig");
 
-pub const InterpreterError = vm_native.NativeError || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
+pub const InterpreterError = Obj.Error || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     objects: GC,
@@ -96,7 +96,7 @@ pub const VM = struct {
 
         const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
-        try debug.disassembleChunk(function.chunk, "Main");
+        if (dbg) try debug.disassembleChunk(function.chunk, "Main");
 
         try Interpreter(callstack_size, stack_size).run(self, function, dbg);
     }
@@ -351,32 +351,23 @@ pub const VM = struct {
                             const val = self.pop();
                             const key = self.pop();
                             const obj = self.pop();
-                            if (obj.is(Obj.Type.Table)) {
-                                var m = obj.obj.cast(.Table) catch unreachable;
-                                if (val.is(Value.nil)) {
-                                    m.delete(key);
-                                } else {
-                                    _ = try m.set(key, val);
-                                }
-                            } else if (obj.is(Obj.Type.List)) {
-                                var m = obj.obj.cast(.List) catch unreachable;
-                                if (val.is(Value.nil) and key.eql(Value.init(@as(f64, @floatFromInt(m.len - 1))))) {
-                                    _ = m.pop(self.vm.allocator);
-                                    while(m.tip) |t| {
-                                        if (t.val.is(Value.nil)) {
-                                            _ = m.pop(self.vm.allocator);
+                            var pushed = false;
+                            if (obj.is(Value.obj)) {
+                                switch(obj.obj.type) {
+                                    .Function, .Native, .Closure, .Upvalue, .String => {},
+                                    inline else => |tp| {
+                                        var m = obj.obj.cast(tp) catch unreachable;
+                                        if (val.is(Value.nil)) {
+                                            m.delete(key);
                                         } else {
-                                            break;
+                                            _ = try m.set(key, val);
                                         }
+                                        pushed = true;
                                     }
-                                } else {
-                                    m.set(key, val, self.vm.allocator) catch {
-                                        self.runtimeError("Invalid index for a list, has to be a number greater than 0", .{});
-                                        return InterpreterError.RuntimeError;
-                                    };
                                 }
-                            } else {
-                                self.runtimeError("Cannot index a non-table value", .{});
+                            }
+                            if (!pushed) {
+                                self.runtimeError("Cannot index a value of type {s}", .{obj.typeName()});
                                 return InterpreterError.RuntimeError;
                             }
                             self.push(val);

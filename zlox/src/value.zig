@@ -13,6 +13,8 @@ pub const Value = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
 
+    pub const Array = array.Array(Value, u8, 8);
+
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
             .number => |val| try writer.print("{d}", .{val}),
@@ -90,5 +92,3 @@ pub const Value = union(enum) {
         };
     }
 };
-
-pub const ValueArray = array.Array(Value, u8, 8);

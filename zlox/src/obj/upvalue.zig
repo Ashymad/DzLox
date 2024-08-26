@@ -3,12 +3,12 @@ const std = @import("std");
 const utils = @import("../comptime_utils.zig");
 const Value = @import("../value.zig").Value;
 const Super = @import("../obj.zig").Obj;
-const Error = Super.Error;
 
 pub const Upvalue = packed struct {
     const Self = @This();
 
     pub const Arg = *Value;
+    pub const Error = error { OutOfMemory };
 
     obj: Super,
     location: *Value,
