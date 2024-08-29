@@ -78,7 +78,7 @@ pub fn Compiler(size: comptime_int) type {
         };
 
         const rules = init: {
-            var new: [@typeInfo(Token).Enum.fields.len]ParseRule = undefined;
+            var new: [@typeInfo(Token).@"enum".fields.len]ParseRule = undefined;
             for (&new, 0..) |*v, i| {
                 const T = Token;
                 const S = Self;

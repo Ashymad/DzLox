@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn copy_const(T: type, U: type) type {
     comptime var info = @typeInfo(U);
-    info.Pointer.is_const = @typeInfo(T).Pointer.is_const;
+    info.pointer.is_const = @typeInfo(T).pointer.is_const;
     return @Type(info);
 }
 
@@ -12,7 +12,7 @@ pub fn typeFromTag(T: type, comptime tag: std.meta.Tag(T)) type {
 }
 
 pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
-    inline for (@typeInfo(T).Union.fields) |field| {
+    inline for (@typeInfo(T).@"union".fields) |field| {
         if (U == field.type) {
             return @field(T, field.name);
         }
@@ -21,5 +21,5 @@ pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
 }
 
 pub fn fn_error(comptime fun: anytype) type {
-    return @typeInfo(@typeInfo(@TypeOf(fun)).Fn.return_type.?).ErrorUnion.error_set;
+    return @typeInfo(@typeInfo(@TypeOf(fun)).@"fn".return_type.?).error_union.error_set;
 }
