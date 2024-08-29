@@ -36,6 +36,7 @@ pub const OP = enum(u8) {
     GET_INDEX,
     CALL,
     CLOSURE,
+    CLOSE_UPVALUE
 };
 
 pub const Chunk = struct {

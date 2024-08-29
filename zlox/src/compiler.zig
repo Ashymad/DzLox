@@ -60,9 +60,10 @@ pub fn Compiler(size: comptime_int) type {
         const upvalues_size = std.math.maxInt(u8);
 
         const Local = struct {
-            name: scanner.Token,
-            depth: ?usize,
-            con: bool,
+            name: scanner.Token = scanner.Token.Empty,
+            depth: ?usize = null,
+            con: bool = true,
+            captured: bool = false,
         };
 
         const ParseFn = *const fn (*Self, bool) void;
@@ -310,6 +311,7 @@ pub fn Compiler(size: comptime_int) type {
                 }
                 while(!self.match(Token.RIGHT_BRACKET)) {
                     self.consume(Token.COMMA, "Expect ',' between expressions");
+                    if (self.match(Token.RIGHT_BRACKET)) break;
                     self.expression();
                     argCount += 1;
                     if(!isList) {
@@ -364,8 +366,8 @@ pub fn Compiler(size: comptime_int) type {
 
         fn resolveUpvalue(self: *Self, name: scanner.Token) ?u8 {
             if (self.enclosing) |enclosing| {
-                std.debug.print("Resolving '{s}' in '{s}'\n", .{name.lexeme, enclosing.currentFunction});
                 if (enclosing.resolveLocal(name)) |local| {
+                    enclosing.locals[local].captured = true;
                     return self.addUpvalue(local, true) catch null;
                 } else if (enclosing.resolveUpvalue(name)) |upvalue| {
                     return self.addUpvalue(upvalue, false) catch null;
@@ -379,7 +381,6 @@ pub fn Compiler(size: comptime_int) type {
 
             for (self.upvalues[0..count], 0..) |upvalue, i| {
                 if (upvalue.index == idx and upvalue.isLocal == isLocal) {
-                    std.debug.print("Found existing at {d}\n", .{i});
                     return @intCast(i);
                 }
             }
@@ -390,7 +391,6 @@ pub fn Compiler(size: comptime_int) type {
                 return self.lastError;
             }
 
-            std.debug.print("New {s} upvalue in {s} idx {d} at {d} \n", .{if (isLocal) "local" else "upvalue", self.currentFunction, idx, count});
             self.upvalues[count] = .{.index = idx, .isLocal = isLocal};
             self.currentFunction.upvalue_count += 1;
             return count;
@@ -639,7 +639,7 @@ pub fn Compiler(size: comptime_int) type {
                 self.errorAt(name, "Too many variables in function");
                 return;
             }
-            self.locals[self.localCount] = Local {.name = name, .depth = null, .con = con};
+            self.locals[self.localCount] = Local {.name = name, .con = con};
             self.localCount += 1;
         }
 
@@ -912,7 +912,11 @@ pub fn Compiler(size: comptime_int) type {
                 } else {
                     self.errorAt(self.locals[self.localCount-1].name, "Unitialized variable at scope end");
                 }
-                self.emitOP(OP.POP);
+                if (self.locals[self.localCount-1].captured) {
+                    self.emitOP(OP.CLOSE_UPVALUE);
+                } else {
+                    self.emitOP(OP.POP);
+                }
                 self.localCount -= 1;
             }
         }
@@ -940,7 +944,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn init(scan: *scanner.Scanner, objects: *GC, fun: *Obj.Function) Self {
-            return Self{
+            var self = Self{
                 .scanner = scan,
                 .current = scanner.Token.Empty,
                 .previous = scanner.Token.Empty,
@@ -949,12 +953,14 @@ pub fn Compiler(size: comptime_int) type {
                 .lastError = scanner.ScannerError.EmptyToken,
                 .currentFunction = fun,
                 .objects = objects,
-                .locals = [_]Local{Local{.name = scanner.Token.Empty, .depth = 0, .con = true}} ** size,
+                .locals = [_]Local{Local{}} ** size,
                 .localCount = 1,
                 .scopeDepth = 0,
                 .enclosing = null,
                 .upvalues = [_]Upvalue{Upvalue{.index = 0, .isLocal = false}} ** upvalues_size,
             };
+            self.locals[0].depth = 0;
+            return self;
         }
 
         fn init_enclosed(enclosing: *Self, fun: *Obj.Function) Self {

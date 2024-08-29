@@ -1,4 +1,5 @@
 const std = @import("std");
+const utils = @import("comptime_utils.zig");
 
 pub fn List(T: type) type {
     return struct {
@@ -112,6 +113,49 @@ pub fn List(T: type) type {
             }
         }
 
+        pub fn insert_before(self: *Self, element: ?*Element, val: T) Error!void {
+            if(element) |el| {
+                if(el.prev) |prev| {
+                    const new = try self.allocator.create(Element);
+                    new.* = .{.val = val, .next = el, .prev = prev};
+                    prev.next = new;
+                    el.prev = new;
+                    self.len += 1;
+                    return;
+                }       
+            } 
+            try self.push(val);
+        }
+
+        pub fn insert_after(self: *Self, element: ?*Element, val: T) Error!void {
+            if(element) |el| {
+                if(el.next) |next| {
+                    const new = try self.allocator.create(Element);
+                    new.* = .{.val = val, .next = next, .prev = el};
+                    next.prev = new;
+                    el.next = new;
+                    self.len += 1;
+                    return;
+                }       
+            } 
+            try self.push_end(val);
+        }
+
+        pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) utils.fn_error(@TypeOf(writer).write)!void {
+            _ = try writer.write("[");
+            var end = self.end;
+            while (end) |el| : (end = el.prev) {
+                if (el.val) |v| {
+                    try v.format(fmt, options, writer);
+                } else {
+                    _ = try writer.write("-");
+                }
+                if (el.prev) |_| _ = try writer.write(", ");
+            }
+            _ = try writer.writeAll("]");
+        }
+
+
         fn _pop(self: *Self) Error!?T {
             if (self.tip) |tip| {
                 if (tip.next) |next| {
@@ -153,6 +197,23 @@ pub fn List(T: type) type {
 
         pub fn push(self: *Self, val: T) Error!void {
             return self._push(val);
+        }
+
+        fn _push_end(self: *Self, val: ?T) Error!void {
+            const new_end = try self.allocator.create(Element);
+            if (self.tip == null) {
+                self.tip = new_end;
+            }
+            if (self.end) |old_end| {
+                old_end.next = new_end;
+            }
+            new_end.* = Element{.val = val, .prev = self.end, .next = null};
+            self.end = new_end;
+            self.len += 1;
+        }
+
+        pub fn push_end(self: *Self, val: T) Error!void {
+            return self._push_end(val);
         }
     };
 }

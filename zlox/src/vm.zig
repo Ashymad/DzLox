@@ -8,6 +8,7 @@ const Obj = @import("obj.zig").Obj;
 const GC = @import("gc.zig").GC;
 const Callback = @import("vm/callbacks.zig");
 const table = @import("table.zig");
+const list = @import("list.zig");
 const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
 const vm_native = @import("vm/native.zig");
@@ -103,11 +104,14 @@ pub const VM = struct {
 
     fn Interpreter(callstack_size: comptime_int, stack_size: comptime_int) type {
         return struct {
+            const List = list.List(*Obj.Upvalue);
+
             frames: [callstack_size]CallFrame,
             frameCount: usize,
             stackTop: [*]Value,
             stack: [stack_size]Value,
             vm: *VM,
+            open_upvalues: List,
 
             pub fn run(vm: *VM, function: *Obj.Function, dbg: bool) InterpreterError!void {
                 var self = @This(){
@@ -115,8 +119,12 @@ pub const VM = struct {
                     .frameCount = 1,
                     .stack = [_]Value{Value.init({})} ** stack_size,
                     .stackTop = undefined,
-                    .vm = vm
+                    .vm = vm,
+                    .open_upvalues = List.init(vm.allocator)
                 };
+
+                defer self.open_upvalues.free();
+
                 self.stackTop = &self.stack;
                 self.frames[0] = CallFrame.init(.Function, function, self.stackTop);
                 self.push(Value.init(function.cast()));
@@ -220,8 +228,27 @@ pub const VM = struct {
                 return;
             }
 
-            fn captureUpvalue(self: *@This(), local: *Value) !*Obj.Upvalue {
-                return self.vm.objects.emplace(.Upvalue, local);
+            fn captureUpvalue(self: *@This(), slot: u8) !*Obj.Upvalue {
+                var upvalue = self.open_upvalues.tip;
+                while(upvalue) |el| : (upvalue = el.next) {
+                    const val = el.val.?;
+                    if (val.slot == slot)
+                        return val;
+                    if (val.slot > slot)
+                        break;
+                }
+                const new = try self.vm.objects.emplace(.Upvalue, .{.val = &self.frame().slots[slot], .slot = slot});
+                try self.open_upvalues.insert_after(upvalue, new);
+                return new;
+            }
+
+            fn closeUpvalues(self: *@This(), slot: u8) !void {
+                while(self.open_upvalues.tip) |el| {
+                    if (el.val.?.slot < slot) break;
+
+                    const upval = self.open_upvalues.pop() catch unreachable;
+                    try upval.close(self.vm.allocator);
+                }
             }
 
             fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
@@ -237,6 +264,10 @@ pub const VM = struct {
 
             fn instruction_idx(self: *const @This()) usize {
                 return @intFromPtr(self.ip()) - @intFromPtr(self.frame().chunk.code.data.ptr);
+            }
+
+            fn current_slot(self: *const @This()) u8 {
+                return @intCast((@intFromPtr(self.stackTop) - @intFromPtr(self.frame().slots)) / @sizeOf(@TypeOf(self.stackTop[0])));
             }
 
             fn execute(self: *@This(), dbg: bool) !void {
@@ -261,6 +292,7 @@ pub const VM = struct {
                                 _ = self.pop();
                                 return;
                             }
+                            try self.closeUpvalues(0);
                             self.stackTop = self.frame().slots;
                             self.frameCount -= 1;
                             self.push(result);
@@ -323,11 +355,17 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.GET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
-                            self.push(closure.upvalues[self.read_byte()].?.location.*);
+                            const index = self.read_byte();
+                            self.push(closure.upvalues[index].?.location.*);
                         },
                         @intFromEnum(OP.SET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
-                            closure.upvalues[self.read_byte()].?.location.* = self.peek(0);
+                            const index = self.read_byte();
+                            closure.upvalues[index].?.location.* = self.peek(0);
+                        },
+                        @intFromEnum(OP.CLOSE_UPVALUE) => {
+                            try self.closeUpvalues(self.current_slot());
+                            _ = self.pop();
                         },
                         @intFromEnum(OP.GET_INDEX) => {
                             const key = self.pop();
@@ -380,11 +418,13 @@ pub const VM = struct {
                             const function = try self.read_constant().obj.cast(.Function);
                             const closure = try self.vm.objects.emplace(.Closure, function);
                             for(closure.upvalues[0..closure.upvalues_len]) |*upvalue| {
-                                if(self.read_byte() == 1) {
-                                    upvalue.* = try self.captureUpvalue(&self.frame().slots[self.read_byte()]);
+                                const isLocal = self.read_byte();
+                                const slot = self.read_byte();
+                                if(isLocal == 1) {
+                                    upvalue.* = try self.captureUpvalue(slot);
                                 } else {
                                     const callee = try self.frame().callee.cast(.Closure);
-                                    upvalue.* = callee.upvalues[self.read_byte()];
+                                    upvalue.* = callee.upvalues[slot];
                                 }
                             }
                             self.push(Value.init(closure.cast()));

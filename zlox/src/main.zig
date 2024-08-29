@@ -39,7 +39,7 @@ pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
     const text = try file.reader().readAllAlloc(allocator, 999999);
     defer allocator.free(text);
 
-    try VM.interpret(text, true);
+    try VM.interpret(text, false);
 }
 
 pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {

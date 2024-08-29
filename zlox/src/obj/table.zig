@@ -14,7 +14,6 @@ pub const Table = packed struct {
 
     obj: Super,
     table: *Self.Table,
-    hash: u32,
     len: usize,
 
     pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
@@ -24,7 +23,6 @@ pub const Table = packed struct {
                 .type = Super.Type.Table,
             },
             .table = try allocator.create(Self.Table),
-            .hash = 0,
             .len = 0,
         };
         self.table.* = Self.Table.init(allocator);
@@ -36,7 +34,6 @@ pub const Table = packed struct {
     }
 
     pub fn set(self: *Self, key: Value, val: Value) Error!bool {
-        self.hash +%= hash.hash(key) +% hash.hash(val);
         self.len += 1;
         return self.table.set(key, val);
     }
@@ -46,8 +43,6 @@ pub const Table = packed struct {
     }
 
     pub fn delete(self: *Self, key: Value) void {
-        const val = self.table.get(key) catch return;
-        self.hash -%= hash.hash(key) -% hash.hash(val);
         if (self.table.delete(key)) self.len -= 1;
     }
 
