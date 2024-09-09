@@ -74,16 +74,18 @@ pub fn List(T: type) type {
             }
         }
 
-        fn _set(self: *Self, index: usize, val: ?T) Error!void {
+        fn _set(self: *Self, index: usize, val: ?T) Error!bool {
             var idx_rev: isize = @intCast(index);
             var idx: isize = @as(isize, @intCast(self.len)) - idx_rev;
             idx_rev += 1;
+            var isNewVal = false;
 
             if (idx <= 0) {
                 while(idx < 0) : (idx += 1) {
                     try self._push(null);
                 }
                 try self._push(val);
+                isNewVal = true;
             } else if (idx < idx_rev) {
                 var tip = self.tip;
                 while(idx > 1) : (idx -= 1) {
@@ -97,10 +99,10 @@ pub fn List(T: type) type {
                 }
                 end.?.val = val;
             }
-
+            return isNewVal;
         }
 
-        pub fn set(self: *Self, index: usize, val: T) Error!void {
+        pub fn set(self: *Self, index: usize, val: T) Error!bool {
             return self._set(index, val);
         }
 
@@ -109,7 +111,7 @@ pub fn List(T: type) type {
             if (index == self.len - 1) {
                 _ = self.pop() catch unreachable;
             } else {
-                self._set(index, null) catch unreachable;
+                _ = self._set(index, null) catch unreachable;
             }
         }
 
@@ -140,21 +142,6 @@ pub fn List(T: type) type {
             } 
             try self.push_end(val);
         }
-
-        pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) utils.fn_error(@TypeOf(writer).write)!void {
-            _ = try writer.write("[");
-            var end = self.end;
-            while (end) |el| : (end = el.prev) {
-                if (el.val) |v| {
-                    try v.format(fmt, options, writer);
-                } else {
-                    _ = try writer.write("-");
-                }
-                if (el.prev) |_| _ = try writer.write(", ");
-            }
-            _ = try writer.writeAll("]");
-        }
-
 
         fn _pop(self: *Self) Error!?T {
             if (self.tip) |tip| {
@@ -214,6 +201,20 @@ pub fn List(T: type) type {
 
         pub fn push_end(self: *Self, val: T) Error!void {
             return self._push_end(val);
+        }
+
+        pub fn for_each(self: *const Self, arg: anytype, fun: fn (@TypeOf(arg), ?T) void) void {
+            var end = self.end;
+            while (end) |el| : (end = el.prev) {
+                fun(arg, el.val);
+            }
+        }
+
+        pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun)!void {
+            var end = self.end;
+            while (end) |el| : (end = el.prev) {
+                try fun(arg, el.val);
+            }
         }
     };
 }

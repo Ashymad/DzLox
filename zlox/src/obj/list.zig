@@ -34,16 +34,27 @@ pub const List = packed struct {
     }
 
     pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) utils.fn_error(@TypeOf(writer).write)!void {
-        _ = try writer.write("[");
-        var end = self.list.end;
-        while (end) |el| : (end = el.prev) {
-            if (el.val) |v| {
-                try v.format(fmt, options, writer);
-            } else {
-                _ = try writer.write("-");
+        const Printer = struct {
+            options: std.fmt.FormatOptions,
+            writer: @TypeOf(writer),
+            count: usize,
+
+            pub fn print(this: *@This(), val: ?Value) utils.fn_error(@TypeOf(writer).write)!void {
+                this.count -= 1;
+                if (val) |v| {
+                    try v.format(fmt, this.options, this.writer);
+                } else {
+                    _ = try this.writer.write("-");
+                }
+                if (this.count > 0) _ = try this.writer.write(", ");
             }
-            if (el.prev) |_| _ = try writer.write(", ");
-        }
+
+        };
+
+        var printer = Printer{.options = options, .writer = writer, .count = self.list.len};
+
+        _ = try writer.write("[");
+        try self.list.for_each_try(&printer, Printer.print);
         _ = try writer.writeAll("]");
     }
 
@@ -75,6 +86,6 @@ pub const List = packed struct {
         if (!index.is(Value.number) or index.number < 0) {
             return Error.InvalidArgument;
         }
-        return self.list.set(@intFromFloat(index.number), val);
+        _ = try self.list.set(@intFromFloat(index.number), val);
     }
 };
