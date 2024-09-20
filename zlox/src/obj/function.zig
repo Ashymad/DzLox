@@ -25,9 +25,7 @@ pub const Function = packed struct {
     pub fn init(tp: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.Function,
-            },
+            .obj = Super.make(Self),
             .chunk = try allocator.create(chunk.Chunk),
             .arity = 0,
             .name = null,

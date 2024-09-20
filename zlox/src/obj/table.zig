@@ -19,9 +19,7 @@ pub const Table = packed struct {
     pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.Table,
-            },
+            .obj = Super.make(Self),
             .table = try allocator.create(Self.Table),
             .len = 0,
         };

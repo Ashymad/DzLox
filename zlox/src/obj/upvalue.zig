@@ -18,9 +18,7 @@ pub const Upvalue = packed struct {
     pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.Upvalue,
-            },
+            .obj = Super.make(Self),
             .location = arg.val,
             .closed = false,
             .slot = arg.slot

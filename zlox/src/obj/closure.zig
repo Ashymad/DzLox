@@ -17,9 +17,7 @@ pub const Closure = packed struct {
     pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.Closure,
-            },
+            .obj = Super.make(Self),
             .upvalues = (try allocator.alloc(?*Super.Upvalue, arg.upvalue_count)).ptr,
             .upvalues_len = arg.upvalue_count,
             .function = arg,

@@ -91,7 +91,10 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
         pub fn for_each(self: *const Self, arg: anytype, fun: fn (@TypeOf(arg), K, V) void) void {
             for (self.entries) |entry| {
                 switch (entry) {
-                    .some => |some| fun(arg, some.key, some.value),
+                    .some => |some| if (@TypeOf(arg) == void)
+                            fun(some.key, some.value)
+                        else 
+                            fun(arg, some.key, some.value),
                     else => {},
                 }
             }
@@ -100,7 +103,10 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
         pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun)!void {
             for (self.entries) |entry| {
                 switch (entry) {
-                    .some => |some| try fun(arg, some.key, some.value),
+                    .some => |some| if (@TypeOf(arg) == void)
+                            try fun(some.key, some.value)
+                        else 
+                            try fun(arg, some.key, some.value),
                     else => {},
                 }
             }

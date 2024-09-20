@@ -20,9 +20,7 @@ pub const List = packed struct {
     pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.List,
-            },
+            .obj = Super.make(Self),
             .list = try allocator.create(Self.List)
         };
         self.list.* = Self.List.init(allocator);
@@ -56,6 +54,10 @@ pub const List = packed struct {
         _ = try writer.write("[");
         try self.list.for_each_try(&printer, Printer.print);
         _ = try writer.writeAll("]");
+    }
+
+    pub fn mark(self: *Self) void {
+        self.list.for_each({}, utils.if_not_null(Value.mark));
     }
 
     pub fn eql(self: *const Self, other: *const Self) bool {

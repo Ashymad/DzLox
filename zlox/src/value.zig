@@ -91,4 +91,11 @@ pub const Value = union(enum) {
             .obj => |x| x.eql(other.obj),
         };
     }
+
+    pub fn mark(self: Self) void {
+        switch(self) {
+            .obj => |x| x.mark(),
+            else => {}
+        }
+    }
 };

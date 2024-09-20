@@ -206,14 +206,20 @@ pub fn List(T: type) type {
         pub fn for_each(self: *const Self, arg: anytype, fun: fn (@TypeOf(arg), ?T) void) void {
             var end = self.end;
             while (end) |el| : (end = el.prev) {
-                fun(arg, el.val);
+                if (@TypeOf(arg) == void)
+                    fun(el.val)
+                else
+                    fun(arg, el.val);
             }
         }
 
         pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun)!void {
             var end = self.end;
             while (end) |el| : (end = el.prev) {
-                try fun(arg, el.val);
+                if (@TypeOf(arg) == void)
+                    try fun(el.val)
+                else
+                    try fun(arg, el.val);
             }
         }
     };

@@ -23,3 +23,17 @@ pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
 pub fn fn_error(comptime fun: anytype) type {
     return @typeInfo(@typeInfo(@TypeOf(fun)).@"fn".return_type.?).error_union.error_set;
 }
+
+pub fn param_type(comptime fun: anytype, idx: comptime_int) type {
+    return @TypeOf(fun).@"fn".params[idx].type.?;
+}
+
+pub fn if_not_null(comptime fun: anytype) fn (?param_type(fun, 0)) void {
+    return struct {
+        pub fn function(arg: ?param_type(fun, 0)) void {
+            if (arg) |a| {
+                _ = fun(a);
+            }
+        }
+    }.function;
+}

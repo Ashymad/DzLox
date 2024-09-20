@@ -31,9 +31,7 @@ pub const Native = packed struct {
     pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
         const self: *Self = try allocator.create(Self);
         self.* =  Self{
-            .obj = Super{
-                .type = Super.Type.Native,
-            },
+            .obj = Super.make(Self),
             .fun = arg.fun,
             .arity_min = arg.arity_min,
             .arity_max = arg.arity_max,

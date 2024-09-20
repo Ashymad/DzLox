@@ -23,9 +23,7 @@ pub const String = packed struct {
     fn new(arg: Arg, params: ArgParams, allocator: std.mem.Allocator) Error!*Self {
         const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(Self), @sizeOf(Self) + params.len));
         ret.* = Self{
-            .obj = Super{
-                .type = Super.Type.String,
-            },
+            .obj = Super.make(Self),
             .hash = params.hash,
         };
         for (arg) |el| {
