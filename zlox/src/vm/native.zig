@@ -2,7 +2,7 @@ const std = @import("std");
 const GC = @import("../gc.zig").GC;
 const Value = @import("../value.zig").Value;
 
-pub const Error = @import("../obj.zig").Obj.Native.Error;
+pub const Error = GC.Obj.Native.Error;
 
 pub const Clock = struct {
     var start: std.time.Instant = undefined;

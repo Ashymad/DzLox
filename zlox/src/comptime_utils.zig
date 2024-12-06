@@ -37,3 +37,21 @@ pub fn if_not_null(comptime fun: anytype) fn (?param_type(fun, 0)) void {
         }
     }.function;
 }
+
+pub fn make_packed(s: type) type {
+    const oldFields = @typeInfo(s).@"struct".fields;
+    var newFields: [oldFields.len]std.builtin.Type.StructField = undefined;
+
+    for (oldFields, &newFields) |oldField, *newField| {
+        newField.* = oldField;
+        newField.alignment = 0;
+        newField.is_comptime = false;
+    }
+
+    return @Type(std.builtin.Type{.@"struct" = .{
+        .layout = std.builtin.Type.ContainerLayout.@"packed",
+        .fields = &newFields,
+        .decls = &[_]std.builtin.Type.Declaration{},
+        .is_tuple = false
+    }});
+}

@@ -8,6 +8,9 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
 
         pub const Error = error{ OutOfMemory, KeyError };
 
+        pub const Key = K;
+        pub const Value = V;
+
         pub const Entry = union(enum) {
             const Some = struct {
                 key: K,

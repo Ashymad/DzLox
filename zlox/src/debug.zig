@@ -1,7 +1,7 @@
 const std = @import("std");
 const chunk = @import("chunk.zig");
 const value = @import("value.zig");
-const Obj = @import("obj.zig").Obj;
+const Obj = @import("gc.zig").GC.Obj;
 const print = std.debug.print;
 
 const Error = Obj.Error;

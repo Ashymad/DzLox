@@ -1,4 +1,4 @@
-const Obj = @import("obj.zig").Obj;
+const Obj = @import("gc.zig").GC.Obj;
 const Value = @import("value.zig").Value;
 
 pub fn hash_append_t(T: type) fn (u32, T) u32 {

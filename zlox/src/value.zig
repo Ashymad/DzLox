@@ -1,6 +1,6 @@
 const std = @import("std");
 const array = @import("array.zig");
-const Obj = @import("obj.zig").Obj;
+const Obj = @import("gc.zig").GC.Obj;
 const utils = @import("comptime_utils.zig");
 
 pub const Value = union(enum) {
@@ -90,12 +90,5 @@ pub const Value = union(enum) {
             .nil => true,
             .obj => |x| x.eql(other.obj),
         };
-    }
-
-    pub fn mark(self: Self) void {
-        switch(self) {
-            .obj => |x| x.mark(),
-            else => {}
-        }
     }
 };

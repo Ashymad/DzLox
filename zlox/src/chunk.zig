@@ -1,7 +1,6 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const array = @import("array.zig");
-const Obj = @import("obj.zig").Obj;
 
 pub const OP = enum(u8) {
     CONSTANT,

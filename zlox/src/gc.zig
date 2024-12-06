@@ -1,10 +1,12 @@
 const std = @import("std");
 
-const Obj = @import("obj.zig").Obj;
 const list = @import("list.zig");
 const Value = @import("value.zig").Value;
 
 pub const GC = struct {
+
+    pub const Obj = @import("obj.zig").Obj(.{.mark = false});
+
     const Self = @This();
 
     const List = list.List(*Obj);
@@ -44,12 +46,48 @@ pub const GC = struct {
         };
         if (newObj) {
             if (DBG_STRESS) {
-                // self.collect();
+                self.collect();
             }
             dbg_print("Allocating {} at 0x{x}: {s}\n", .{obj.obj.type, @intFromPtr(obj), obj});
             try self.list.push(obj.cast());
         }
         return obj;
+    }
+
+    pub fn markTable(table: anytype) void {
+        const Table = @TypeOf(table);
+        table.for_each({}, struct{
+            pub fn fun(key: Table.Key, val: Table.Value) void {
+                Self.mark(key);
+                Self.mark(val);
+            }
+        }.fun);
+        
+    }
+
+    pub fn markArray(arr: anytype) void {
+        for(arr) |el| {
+            Self.mark(el);
+        }
+    }
+
+    pub fn mark(arg: anytype) void {
+        const T = @TypeOf(arg);
+        switch(T) {
+            Value => switch(arg) {
+                .obj => |o| {
+                    mark(o);
+                },
+                else => {}
+            },
+            *Obj => {
+                dbg_print("Marking {} at 0x{x}: {s}\n", .{arg.type, @intFromPtr(arg), arg});
+                arg.fields.mark = true;
+            },
+            else => if(Obj.isChild(T)) {
+                mark(arg.cast());
+            }
+        }
     }
 
     pub fn emplace_cast(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) (List.Error || tp.get().Error)!*Obj {
