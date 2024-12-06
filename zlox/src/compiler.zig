@@ -262,11 +262,11 @@ pub fn Compiler(size: comptime_int) type {
             const argCount = self.argumentList();
             self.emit(OP.CALL, argCount);
         }
-        
+
         fn argumentList(self: *Self) u8 {
             var argCount: u8 = 0;
             if (!self.check(Token.RIGHT_PAREN)) {
-                while(true) {
+                while (true) {
                     self.expression();
                     if (argCount == std.math.maxInt(u8)) {
                         self.errorAtPrevious("Too many arguments");
@@ -287,7 +287,7 @@ pub fn Compiler(size: comptime_int) type {
                 return err;
             }));
         }
-        
+
         fn emitObj(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !void {
             self.emit(OP.CONSTANT, try self.makeObj(tp, arg));
         }
@@ -298,9 +298,9 @@ pub fn Compiler(size: comptime_int) type {
             var argCount: u8 = 0;
             var isList = true;
 
-            if (self.match(Token.RIGHT_BRACKET)) {
-            } else if (self.match(Token.COLON)) {
+            if (self.match(Token.RIGHT_BRACKET)) {} else if (self.match(Token.COLON)) {
                 isList = false;
+                self.consume(Token.RIGHT_BRACKET, "Expect ']'");
             } else {
                 self.expression();
                 argCount += 1;
@@ -309,12 +309,12 @@ pub fn Compiler(size: comptime_int) type {
                     self.expression();
                     argCount += 1;
                 }
-                while(!self.match(Token.RIGHT_BRACKET)) {
+                while (!self.match(Token.RIGHT_BRACKET)) {
                     self.consume(Token.COMMA, "Expect ',' between expressions");
                     if (self.match(Token.RIGHT_BRACKET)) break;
                     self.expression();
                     argCount += 1;
-                    if(!isList) {
+                    if (!isList) {
                         self.consume(Token.COLON, "Expect ':' between key and value");
                         self.expression();
                         argCount += 1;
@@ -322,9 +322,9 @@ pub fn Compiler(size: comptime_int) type {
                 }
             }
             if (isList) {
-                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{.name = "internal::list", .fun = vm_native.list}) catch return) catch return;
+                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{ .name = "internal::list", .fun = vm_native.list }) catch return) catch return;
             } else {
-                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{.name = "internal::table", .fun = vm_native.table}) catch return) catch return;
+                self.currentChunk().code.set(offset, self.makeObj(.Native, Obj.Native.Arg{ .name = "internal::table", .fun = vm_native.table }) catch return) catch return;
             }
             self.emit(OP.CALL, argCount);
         }
@@ -345,15 +345,15 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn namedVariable(self: *Self, tok: scanner.Token, canAssign: bool) void {
-            const OPs: struct {get: OP, set: OP, arg: u8} = if (self.resolveLocal(tok)) |arg|
-                .{.get = OP.GET_LOCAL, .set = OP.SET_LOCAL, .arg = arg}
+            const OPs: struct { get: OP, set: OP, arg: u8 } = if (self.resolveLocal(tok)) |arg|
+                .{ .get = OP.GET_LOCAL, .set = OP.SET_LOCAL, .arg = arg }
             else if (self.resolveUpvalue(tok)) |arg|
-                .{.get = OP.GET_UPVALUE, .set = OP.SET_UPVALUE, .arg = arg}
+                .{ .get = OP.GET_UPVALUE, .set = OP.SET_UPVALUE, .arg = arg }
             else
-                .{.get = OP.GET_GLOBAL, .set = OP.SET_GLOBAL, .arg = self.identifierConstant(tok) catch return};
+                .{ .get = OP.GET_GLOBAL, .set = OP.SET_GLOBAL, .arg = self.identifierConstant(tok) catch return };
 
             if (canAssign and self.match(Token.EQUAL)) {
-                if(OPs.get == OP.GET_LOCAL and self.locals[OPs.arg].con) {
+                if (OPs.get == OP.GET_LOCAL and self.locals[OPs.arg].con) {
                     self.errorAtPrevious("Cannot assign to a constant");
                     return;
                 }
@@ -372,10 +372,10 @@ pub fn Compiler(size: comptime_int) type {
                 } else if (enclosing.resolveUpvalue(name)) |upvalue| {
                     return self.addUpvalue(upvalue, false) catch null;
                 }
-            } 
+            }
             return null;
         }
-        
+
         fn addUpvalue(self: *Self, idx: u8, isLocal: bool) !u8 {
             const count = self.currentFunction.upvalue_count;
 
@@ -391,7 +391,7 @@ pub fn Compiler(size: comptime_int) type {
                 return self.lastError;
             }
 
-            self.upvalues[count] = .{.index = idx, .isLocal = isLocal};
+            self.upvalues[count] = .{ .index = idx, .isLocal = isLocal };
             self.currentFunction.upvalue_count += 1;
             return count;
         }
@@ -399,9 +399,9 @@ pub fn Compiler(size: comptime_int) type {
         fn resolveLocal(self: *Self, name: scanner.Token) ?u8 {
             var i = self.localCount;
             while (i > 0) : (i -= 1) {
-                if (identifiersEql(self.locals[i-1].name, name)) {
-                    if(self.locals[i-1].depth) |_| {
-                        return @intCast(i-1);
+                if (identifiersEql(self.locals[i - 1].name, name)) {
+                    if (self.locals[i - 1].depth) |_| {
+                        return @intCast(i - 1);
                     } else {
                         self.errorAt(name, "Can't read local variable in it's own initializer");
                     }
@@ -599,7 +599,7 @@ pub fn Compiler(size: comptime_int) type {
             self.consume(Token.IDENTIFIER, errorMessage);
 
             self.declareVariable(con);
-            if(self.scopeDepth > 0) return 0;
+            if (self.scopeDepth > 0) return 0;
 
             return self.identifierConstant(self.previous);
         }
@@ -617,7 +617,7 @@ pub fn Compiler(size: comptime_int) type {
 
             var i = self.localCount;
             while (i > 0) : (i -= 1) {
-                const local = self.locals[i-1];
+                const local = self.locals[i - 1];
                 if (local.depth) |depth| {
                     if (depth < self.scopeDepth) break;
                 }
@@ -639,17 +639,17 @@ pub fn Compiler(size: comptime_int) type {
                 self.errorAt(name, "Too many variables in function");
                 return;
             }
-            self.locals[self.localCount] = Local {.name = name, .con = con};
+            self.locals[self.localCount] = Local{ .name = name, .con = con };
             self.localCount += 1;
         }
 
         fn markInitialized(self: *Self) void {
-            if(self.scopeDepth == 0) return;
-            self.locals[self.localCount-1].depth = self.scopeDepth;
+            if (self.scopeDepth == 0) return;
+            self.locals[self.localCount - 1].depth = self.scopeDepth;
         }
 
         fn defineVariable(self: *Self, global: u8, con: bool) void {
-            if (self.scopeDepth > 0){
+            if (self.scopeDepth > 0) {
                 self.markInitialized();
                 return;
             }
@@ -715,8 +715,8 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            self.emitObj(.Native, Obj.Native.Arg{.name = "switch", .fun = vm_native.table}) catch return;
-            
+            self.emitObj(.Native, Obj.Native.Arg{ .name = "switch", .fun = vm_native.table }) catch return;
+
             var jumpOver = self.emitJump(OP.JUMP);
             const switchExpression = self.currentChunk().code.len;
             self.expression();
@@ -733,7 +733,7 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.LEFT_BRACE, "Expect '{' after switch()");
 
-            while(!self.match(Token.RIGHT_BRACE)) {
+            while (!self.match(Token.RIGHT_BRACE)) {
                 if (self.match(Token.CASE)) {
                     self.expression();
                     argCount += 2;
@@ -888,11 +888,10 @@ pub fn Compiler(size: comptime_int) type {
             self.currentChunk().code.set(offset + 1, @intCast(jump & 0xff)) catch {
                 self.errorAtPrevious("Invalid jump offset");
             };
-
         }
 
         fn block(self: *Self) void {
-            while(!self.check(Token.RIGHT_BRACE) and !self.check(Token.EOF)) {
+            while (!self.check(Token.RIGHT_BRACE) and !self.check(Token.EOF)) {
                 self.declaration();
             }
 
@@ -906,13 +905,13 @@ pub fn Compiler(size: comptime_int) type {
         fn endScope(self: *Self) void {
             self.scopeDepth -= 1;
 
-            while(self.localCount > 0) {
-                if (self.locals[self.localCount-1].depth) |depth| {
+            while (self.localCount > 0) {
+                if (self.locals[self.localCount - 1].depth) |depth| {
                     if (depth <= self.scopeDepth) break;
                 } else {
-                    self.errorAt(self.locals[self.localCount-1].name, "Unitialized variable at scope end");
+                    self.errorAt(self.locals[self.localCount - 1].name, "Unitialized variable at scope end");
                 }
-                if (self.locals[self.localCount-1].captured) {
+                if (self.locals[self.localCount - 1].captured) {
                     self.emitOP(OP.CLOSE_UPVALUE);
                 } else {
                     self.emitOP(OP.POP);
@@ -957,14 +956,14 @@ pub fn Compiler(size: comptime_int) type {
                 .localCount = 1,
                 .scopeDepth = 0,
                 .enclosing = null,
-                .upvalues = [_]Upvalue{Upvalue{.index = 0, .isLocal = false}} ** upvalues_size,
+                .upvalues = [_]Upvalue{Upvalue{ .index = 0, .isLocal = false }} ** upvalues_size,
             };
             self.locals[0].depth = 0;
             return self;
         }
 
         fn init_enclosed(enclosing: *Self, fun: *Obj.Function) Self {
-            var enclosed =  Self.init(enclosing.scanner, enclosing.objects, fun);
+            var enclosed = Self.init(enclosing.scanner, enclosing.objects, fun);
             enclosed.current = enclosing.current;
             enclosed.enclosing = enclosing;
             enclosed.beginScope();

@@ -31,14 +31,14 @@ pub const VM = struct {
         }
 
         pub fn make_var(v: Value) Self {
-            return Self {
+            return Self{
                 .val = v,
                 .con = false,
             };
         }
 
         pub fn make_con(v: Value) Self {
-            return Self {
+            return Self{
                 .val = v,
                 .con = true,
             };
@@ -54,27 +54,17 @@ pub const VM = struct {
         chunk: *const Chunk,
 
         pub fn init(comptime tp: Obj.Type, callee: *const tp.get(), slots: [*]Value) @This() {
-            return switch(tp) {
-                .Function => @This() {
-                    .callee = callee.cast(),
-                    .ip = callee.chunk.code.data.ptr,
-                    .chunk = callee.chunk,
-                    .slots = slots
-                },
-                .Closure => @This() {
-                    .callee = callee.cast(),
-                    .ip = callee.function.chunk.code.data.ptr,
-                    .chunk = callee.function.chunk,
-                    .slots = slots
-                },
-                else => @compileError("Invalid type")
+            return switch (tp) {
+                .Function => @This(){ .callee = callee.cast(), .ip = callee.chunk.code.data.ptr, .chunk = callee.chunk, .slots = slots },
+                .Closure => @This(){ .callee = callee.cast(), .ip = callee.function.chunk.code.data.ptr, .chunk = callee.function.chunk, .slots = slots },
+                else => @compileError("Invalid type"),
             };
         }
     };
 
     fn defineNative(self: *@This(), name: []const u8, arity_min: u8, arity_max: u8, fun: Obj.Native.Fn) !void {
         const nameObj = try self.objects.emplace(.String, &.{name});
-        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{.fun = fun, .name = name, .arity_min = arity_min, .arity_max = arity_max});
+        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{ .fun = fun, .name = name, .arity_min = arity_min, .arity_max = arity_max });
         _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
     }
 
@@ -114,14 +104,7 @@ pub const VM = struct {
             open_upvalues: List,
 
             pub fn run(vm: *VM, function: *Obj.Function, dbg: bool) InterpreterError!void {
-                var self = @This(){
-                    .frames = [_]CallFrame{undefined} ** callstack_size,
-                    .frameCount = 1,
-                    .stack = [_]Value{Value.init({})} ** stack_size,
-                    .stackTop = undefined,
-                    .vm = vm,
-                    .open_upvalues = List.init(vm.allocator)
-                };
+                var self = @This(){ .frames = [_]CallFrame{undefined} ** callstack_size, .frameCount = 1, .stack = [_]Value{Value.init({})} ** stack_size, .stackTop = undefined, .vm = vm, .open_upvalues = List.init(vm.allocator) };
 
                 defer self.open_upvalues.free();
 
@@ -182,11 +165,11 @@ pub const VM = struct {
             }
 
             fn callValue(self: *@This(), callee: Value, argCount: u8) !void {
-                if(callee.is(Obj.Type.Function)) {
+                if (callee.is(Obj.Type.Function)) {
                     try self.callFunction(callee.obj.cast(.Function) catch unreachable, argCount);
-                } else if(callee.is(Obj.Type.Closure)) {
+                } else if (callee.is(Obj.Type.Closure)) {
                     try self.callClosure(callee.obj.cast(.Closure) catch unreachable, argCount);
-                } else if(callee.is(Obj.Type.Native)) {
+                } else if (callee.is(Obj.Type.Native)) {
                     try self.callNative(callee.obj.cast(.Native) catch unreachable, argCount);
                 } else {
                     self.runtimeError("Can only call functions and classes", .{});
@@ -196,7 +179,7 @@ pub const VM = struct {
 
             fn callClosure(self: *@This(), callee: *Obj.Closure, argCount: u8) !void {
                 if (argCount != callee.function.arity) {
-                    self.runtimeError("Expected {d} arguments but got {d}", .{callee.function.arity, argCount});
+                    self.runtimeError("Expected {d} arguments but got {d}", .{ callee.function.arity, argCount });
                     return InterpreterError.RuntimeError;
                 }
                 if (self.frameCount == callstack_size - 1)
@@ -205,10 +188,9 @@ pub const VM = struct {
                 self.frames[self.frameCount - 1] = CallFrame.init(.Closure, callee, self.stackTop - argCount - 1);
             }
 
-
             fn callFunction(self: *@This(), callee: *Obj.Function, argCount: u8) !void {
                 if (argCount != callee.arity) {
-                    self.runtimeError("Expected {d} arguments but got {d}", .{callee.arity, argCount});
+                    self.runtimeError("Expected {d} arguments but got {d}", .{ callee.arity, argCount });
                     return InterpreterError.RuntimeError;
                 }
                 if (self.frameCount == callstack_size - 1)
@@ -219,7 +201,7 @@ pub const VM = struct {
 
             fn callNative(self: *@This(), native: *Obj.Native, argCount: u8) !void {
                 if (argCount < native.arity_min or argCount > native.arity_max) {
-                    self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{native.arity_min, native.arity_max, argCount});
+                    self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{ native.arity_min, native.arity_max, argCount });
                     return InterpreterError.RuntimeError;
                 }
                 const result = try native.call(&self.vm.objects, argCount, self.stackTop - argCount);
@@ -230,20 +212,20 @@ pub const VM = struct {
 
             fn captureUpvalue(self: *@This(), slot: u8) !*Obj.Upvalue {
                 var upvalue = self.open_upvalues.tip;
-                while(upvalue) |el| : (upvalue = el.next) {
+                while (upvalue) |el| : (upvalue = el.next) {
                     const val = el.val.?;
                     if (val.slot == slot)
                         return val;
                     if (val.slot > slot)
                         break;
                 }
-                const new = try self.vm.objects.emplace(.Upvalue, .{.val = &self.frame().slots[slot], .slot = slot});
+                const new = try self.vm.objects.emplace(.Upvalue, .{ .val = &self.frame().slots[slot], .slot = slot });
                 try self.open_upvalues.insert_after(upvalue, new);
                 return new;
             }
 
             fn closeUpvalues(self: *@This(), slot: u8) !void {
-                while(self.open_upvalues.tip) |el| {
+                while (self.open_upvalues.tip) |el| {
                     if (el.val.?.slot < slot) break;
 
                     const upval = self.open_upvalues.pop() catch unreachable;
@@ -372,7 +354,7 @@ pub const VM = struct {
                             const obj = self.pop();
                             var pushed = false;
                             if (obj.is(Value.obj)) {
-                                switch(obj.obj.type) {
+                                switch (obj.obj.type) {
                                     .Function, .Native, .Closure, .Upvalue => {},
                                     inline else => |tp| {
                                         self.push((obj.obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
@@ -391,7 +373,7 @@ pub const VM = struct {
                             const obj = self.pop();
                             var pushed = false;
                             if (obj.is(Value.obj)) {
-                                switch(obj.obj.type) {
+                                switch (obj.obj.type) {
                                     .Function, .Native, .Closure, .Upvalue, .String => {},
                                     inline else => |tp| {
                                         var m = obj.obj.cast(tp) catch unreachable;
@@ -401,7 +383,7 @@ pub const VM = struct {
                                             _ = try m.set(key, val);
                                         }
                                         pushed = true;
-                                    }
+                                    },
                                 }
                             }
                             if (!pushed) {
@@ -417,10 +399,10 @@ pub const VM = struct {
                         @intFromEnum(OP.CLOSURE) => {
                             const function = try self.read_constant().obj.cast(.Function);
                             const closure = try self.vm.objects.emplace(.Closure, function);
-                            for(closure.upvalues[0..closure.upvalues_len]) |*upvalue| {
+                            for (closure.upvalues[0..closure.upvalues_len]) |*upvalue| {
                                 const isLocal = self.read_byte();
                                 const slot = self.read_byte();
-                                if(isLocal == 1) {
+                                if (isLocal == 1) {
                                     upvalue.* = try self.captureUpvalue(slot);
                                 } else {
                                     const callee = try self.frame().callee.cast(.Closure);
@@ -451,7 +433,7 @@ pub const VM = struct {
                 while (true) : (i -= 1) {
                     const fram = self.frames[i];
                     const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.chunk.code.data.ptr);
-                    std.debug.print("[line {d}] in {s}\n", .{fram.chunk.lines.get(idx) catch 1, fram.callee});
+                    std.debug.print("[line {d}] in {s}\n", .{ fram.chunk.lines.get(idx) catch 1, fram.callee });
                     if (i == 0) break;
                 }
                 std.debug.print(fmt ++ "\n", args);

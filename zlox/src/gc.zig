@@ -4,8 +4,7 @@ const list = @import("list.zig");
 const Value = @import("value.zig").Value;
 
 pub const GC = struct {
-
-    pub const Obj = @import("obj.zig").Obj(.{.mark = false});
+    pub const Obj = @import("obj.zig").Obj(.{ .mark = false });
 
     const Self = @This();
 
@@ -48,7 +47,7 @@ pub const GC = struct {
             if (DBG_STRESS) {
                 self.collect();
             }
-            dbg_print("Allocating {} at 0x{x}: {s}\n", .{obj.obj.type, @intFromPtr(obj), obj});
+            dbg_print("Allocating {} at 0x{x}: {s}\n", .{ obj.obj.type, @intFromPtr(obj), obj });
             try self.list.push(obj.cast());
         }
         return obj;
@@ -56,37 +55,36 @@ pub const GC = struct {
 
     pub fn markTable(table: anytype) void {
         const Table = @TypeOf(table);
-        table.for_each({}, struct{
+        table.for_each({}, struct {
             pub fn fun(key: Table.Key, val: Table.Value) void {
                 Self.mark(key);
                 Self.mark(val);
             }
         }.fun);
-        
     }
 
     pub fn markArray(arr: anytype) void {
-        for(arr) |el| {
+        for (arr) |el| {
             Self.mark(el);
         }
     }
 
     pub fn mark(arg: anytype) void {
         const T = @TypeOf(arg);
-        switch(T) {
-            Value => switch(arg) {
+        switch (T) {
+            Value => switch (arg) {
                 .obj => |o| {
                     mark(o);
                 },
-                else => {}
+                else => {},
             },
             *Obj => {
-                dbg_print("Marking {} at 0x{x}: {s}\n", .{arg.type, @intFromPtr(arg), arg});
+                dbg_print("Marking {} at 0x{x}: {s}\n", .{ arg.type, @intFromPtr(arg), arg });
                 arg.fields.mark = true;
             },
-            else => if(Obj.isChild(T)) {
+            else => if (Obj.isChild(T)) {
                 mark(arg.cast());
-            }
+            },
         }
     }
 
@@ -97,7 +95,7 @@ pub const GC = struct {
     pub fn deinit(self: *Self) void {
         while (true) {
             const el = self.list.pop() catch break;
-            dbg_print("Freeing {} at 0x{x}: {s}\n", .{el.type, @intFromPtr(el), el});
+            dbg_print("Freeing {} at 0x{x}: {s}\n", .{ el.type, @intFromPtr(el), el });
             el.free(self.allocator);
         }
         self.list.free();
