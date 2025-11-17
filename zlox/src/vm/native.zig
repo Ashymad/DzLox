@@ -19,7 +19,7 @@ pub const Clock = struct {
 };
 
 pub fn put(_: *GC, args: []const Value) Error!Value {
-    std.debug.print("{s}", .{args[0]});
+    std.debug.print("{f}", .{args[0]});
     return Value.init({});
 }
 

@@ -41,7 +41,7 @@ pub fn Function(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             switch(self.type) {
                 .Function => _ = try writer.write("<F: "),
                 .Script => _ = try writer.write("<S: "),

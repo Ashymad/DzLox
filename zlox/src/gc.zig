@@ -47,7 +47,7 @@ pub const GC = struct {
             if (DBG_STRESS) {
                 self.collect();
             }
-            dbg_print("Allocating {} at 0x{x}: {s}\n", .{ obj.obj.type, @intFromPtr(obj), obj });
+            dbg_print("Allocating {any} at 0x{x}: {f}\n", .{ obj.obj.type, @intFromPtr(obj), obj });
             try self.list.push(obj.cast());
         }
         return obj;
@@ -79,7 +79,7 @@ pub const GC = struct {
                 else => {},
             },
             *Obj => {
-                dbg_print("Marking {} at 0x{x}: {s}\n", .{ arg.type, @intFromPtr(arg), arg });
+                dbg_print("Marking {any} at 0x{x}: {f}\n", .{ arg.type, @intFromPtr(arg), arg });
                 arg.fields.mark = true;
             },
             else => if (Obj.isChild(T)) {
@@ -95,7 +95,7 @@ pub const GC = struct {
     pub fn deinit(self: *Self) void {
         while (true) {
             const el = self.list.pop() catch break;
-            dbg_print("Freeing {} at 0x{x}: {s}\n", .{ el.type, @intFromPtr(el), el });
+            dbg_print("Freeing {any} at 0x{x}: {f}\n", .{ el.type, @intFromPtr(el), el });
             el.free(self.allocator);
         }
         self.list.free();

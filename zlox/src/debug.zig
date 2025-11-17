@@ -86,7 +86,7 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 fn constantInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, print_fn: bool) Error!usize {
     const constant = try ch.code.get(offset + 1);
     const constval = try ch.constants.get(constant);
-    print("{s:<32} {d:4} '{s}'\n", .{ name, constant, constval});
+    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, constval});
     if (print_fn and constval.is(Obj.Type.Function)) {
         const function = constval.obj.cast(.Function) catch unreachable;
         if (function.name) |str| {
@@ -118,7 +118,7 @@ fn closureInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, p
     const constant = try ch.code.get(off);
     const val = try ch.constants.get(constant);
     const function = try val.obj.cast(.Function);
-    print("{s:<32} {d:4} '{s}'\n", .{ name, constant, function});
+    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, function});
     for (0..function.upvalue_count) |_| {
         const isLocal = try ch.code.get(off + 1);
         const idx = try ch.code.get(off + 2);

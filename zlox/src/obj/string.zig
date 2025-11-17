@@ -22,7 +22,7 @@ pub fn String(fields: anytype) type {
             return p + @sizeOf(Self);
         }
         fn new(arg: Arg, params: ArgParams, allocator: std.mem.Allocator) Error!*Self {
-            const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, @alignOf(Self), @sizeOf(Self) + params.len));
+            const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, std.mem.Alignment.of(Self), @sizeOf(Self) + params.len));
             ret.* = Self{
                 .obj = Super.make(Self),
                 .hash = params.hash,
@@ -42,7 +42,7 @@ pub fn String(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             _ = try writer.writeAll(self.slice());
         }
         pub fn eql(self: *const Self, other: *const Self) bool {

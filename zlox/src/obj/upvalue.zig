@@ -42,8 +42,8 @@ pub fn Upvalue(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-            try writer.print("<Upvalue{{{} at 0x{x}, {}, {}}}>", .{self.location.*, @intFromPtr(self.location), self.closed, self.slot});
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
+            try writer.print("<Upvalue{{{f} at 0x{x}, {any}, {d}}}>", .{self.location.*, @intFromPtr(self.location), self.closed, self.slot});
         }
 
         pub fn eql(_: *const Self, _: *const Self) bool {

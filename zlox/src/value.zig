@@ -15,13 +15,13 @@ pub const Value = union(enum) {
 
     pub const Array = array.Array(Value, u8, 8);
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: Self, writer: *std.Io.Writer) !void {
         switch (self) {
             .number => |val| try writer.print("{d}", .{val}),
             .char => |val| try writer.writeAll(&[_]u8{val}),
             .bool => |val| try writer.writeAll(if (val) "true" else "false"),
             .nil => try writer.writeAll("nil"),
-            .obj => |o| try o.format(fmt, options, writer),
+            .obj => |o| try o.format(writer),
         }
     }
 

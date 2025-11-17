@@ -31,16 +31,15 @@ pub fn List(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) utils.fn_error(@TypeOf(writer).write)!void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             const Printer = struct {
-                options: std.fmt.FormatOptions,
                 writer: @TypeOf(writer),
                 count: usize,
 
-                pub fn print(this: *@This(), val: ?Value) utils.fn_error(@TypeOf(writer).write)!void {
+                pub fn print(this: *@This(), val: ?Value) std.Io.Writer.Error!void {
                     this.count -= 1;
                     if (val) |v| {
-                        try v.format(fmt, this.options, this.writer);
+                        try v.format(this.writer);
                     } else {
                         _ = try this.writer.write("-");
                     }
@@ -49,7 +48,7 @@ pub fn List(fields: anytype) type {
 
             };
 
-            var printer = Printer{.options = options, .writer = writer, .count = self.list.len};
+            var printer = Printer{.writer = writer, .count = self.list.len};
 
             _ = try writer.write("[");
             try self.list.for_each_try(&printer, Printer.print);

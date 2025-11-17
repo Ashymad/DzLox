@@ -32,7 +32,7 @@ pub fn Closure(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             _ = try writer.write("<C: ");
             if (self.function.name) |name| {
                 _ = try writer.write(name.slice());

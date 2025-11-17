@@ -15,7 +15,7 @@ pub fn Obj(fields: anytype) type {
         const Self = @This();
 
         type: Type,
-        fields: utils.make_packed(@TypeOf(fields)) = fields,
+        fields: utils.make_packed_t(@TypeOf(fields)) = utils.make_packed(fields),
 
         pub const List = @import("obj/list.zig").List(fields);
         pub const String = @import("obj/string.zig").String(fields);
@@ -67,9 +67,9 @@ pub fn Obj(fields: anytype) type {
             return (try tp.get().init(arg, allocator)).cast();
         }
 
-        pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             switch (self.type) {
-                inline else => |tp| try self._cast(tp).format(fmt, options, writer),
+                inline else => |tp| try self._cast(tp).format(writer),
             }
         }
         pub fn eql(self: *const Self, other: *const Self) bool {

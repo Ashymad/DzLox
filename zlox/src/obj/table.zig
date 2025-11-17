@@ -45,24 +45,23 @@ pub fn Table(fields: anytype) type {
             if (self.table.delete(key)) self.len -= 1;
         }
 
-        pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             const Printer = struct {
-                options: std.fmt.FormatOptions,
                 writer: @TypeOf(writer),
                 count: usize,
 
-                pub fn print(this: *@This(), key: Value, val: Value) utils.fn_error(@TypeOf(writer).write)!void {
+                pub fn print(this: *@This(), key: Value, val: Value) std.Io.Writer.Error!void {
                     this.count -= 1;
 
-                    try key.format(fmt, this.options, this.writer);
+                    try key.format(this.writer);
                     _ = try this.writer.write(":");
-                    try val.format(fmt, this.options, this.writer);
+                    try val.format(this.writer);
                     if (this.count > 0) _ = try this.writer.write(", ");
                 }
 
             };
 
-            var printer = Printer{.options = options, .writer = writer, .count = self.len};
+            var printer = Printer{.writer = writer, .count = self.len};
             _ = try writer.write("[");
             if (self.table.count > 0) {
                 try self.table.for_each_try(&printer, Printer.print);

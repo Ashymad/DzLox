@@ -40,7 +40,7 @@ pub fn Native(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             _ = try writer.write("<N: ");
             _ = try writer.write(self.name[0..self.name_len]);
             _ = try writer.writeAll(">");

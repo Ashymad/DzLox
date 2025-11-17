@@ -19,7 +19,7 @@ pub fn Type(comptime in_tag: anytype, comptime out_tag: anytype) type {
         };
     } else {
         return struct {
-            call: fn (Value.tagType(in_tag), Value.tagType(in_tag)) callconv(.Inline) Error!Value.tagType(out_tag),
+            call: fn (Value.tagType(in_tag), Value.tagType(in_tag)) callconv(.@"inline") Error!Value.tagType(out_tag),
         };
     }
 }

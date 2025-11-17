@@ -38,7 +38,7 @@ pub fn if_not_null(comptime fun: anytype) fn (?param_type(fun, 0)) void {
     }.function;
 }
 
-pub fn make_packed(s: type) type {
+pub fn make_packed_t(s: type) type {
     const oldFields = @typeInfo(s).@"struct".fields;
     var newFields: [oldFields.len]std.builtin.Type.StructField = undefined;
 
@@ -54,4 +54,16 @@ pub fn make_packed(s: type) type {
         .decls = &[_]std.builtin.Type.Declaration{},
         .is_tuple = false
     }});
+}
+
+pub fn make_packed(s: anytype) make_packed_t(@TypeOf(s)) {
+    const T = @TypeOf(s);
+    const fields = @typeInfo(T).@"struct".fields;
+    var packd: make_packed_t(T) = undefined;
+
+    for (fields) |field| {
+        @field(packd, field.name) = @field(s, field.name);
+    }
+
+    return packd;
 }

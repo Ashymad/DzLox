@@ -258,7 +258,7 @@ pub const VM = struct {
                         std.debug.print("          ", .{});
                         var stackPtr: [*]Value = &self.stack;
                         while (stackPtr != self.stackTop) : (stackPtr += 1) {
-                            std.debug.print("[{s}]", .{stackPtr[0]});
+                            std.debug.print("[{f}]", .{stackPtr[0]});
                         }
                         std.debug.print("\n", .{});
                         _ = try debug.disassembleInstruction(self.frame().chunk, self.instruction_idx());
@@ -266,7 +266,7 @@ pub const VM = struct {
                     const instruction: u8 = self.read_byte();
                     switch (instruction) {
                         @intFromEnum(OP.PRINT) => {
-                            std.debug.print("{s}\n", .{self.pop()});
+                            std.debug.print("{f}\n", .{self.pop()});
                         },
                         @intFromEnum(OP.RETURN) => {
                             const result = self.pop();
@@ -433,7 +433,7 @@ pub const VM = struct {
                 while (true) : (i -= 1) {
                     const fram = self.frames[i];
                     const idx = @intFromPtr(fram.ip) - @intFromPtr(fram.chunk.code.data.ptr);
-                    std.debug.print("[line {d}] in {s}\n", .{ fram.chunk.lines.get(idx) catch 1, fram.callee });
+                    std.debug.print("[line {d}] in {f}\n", .{ fram.chunk.lines.get(idx) catch 1, fram.callee });
                     if (i == 0) break;
                 }
                 std.debug.print(fmt ++ "\n", args);

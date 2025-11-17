@@ -31,13 +31,10 @@ pub fn main() anyerror!u8 {
 }
 
 pub fn runFile(allocator: std.mem.Allocator, path: []const u8) anyerror!void {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    const text = try std.fs.cwd().readFileAlloc(allocator, path, 999999);
+    defer allocator.free(text);
     var VM = try vm.VM.init(allocator);
     defer VM.deinit();
-
-    const text = try file.reader().readAllAlloc(allocator, 999999);
-    defer allocator.free(text);
 
     try VM.interpret(text, false);
 }
@@ -51,7 +48,7 @@ pub fn repl(allocator: std.mem.Allocator, dbg: bool) anyerror!void {
     while (Linenoise.linenoise("lox> ")) |line| {
         defer Linenoise.linenoiseFree(line);
         VM.interpret(std.mem.span(line), dbg) catch |err| {
-            std.debug.print("\nError: {}\n", .{err});
+            std.debug.print("\nError: {any}\n", .{err});
         };
         _ = Linenoise.linenoiseHistoryAdd(line);
     }
