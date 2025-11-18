@@ -95,7 +95,7 @@ pub const GC = struct {
     pub fn deinit(self: *Self) void {
         while (true) {
             const el = self.list.pop() catch break;
-            dbg_print("Freeing {any} at 0x{x}: {f}\n", .{ el.type, @intFromPtr(el), el });
+            dbg_print("Freeing {any} at 0x{x}\n", .{ el.type, @intFromPtr(el)});
             el.free(self.allocator);
         }
         self.list.free();
