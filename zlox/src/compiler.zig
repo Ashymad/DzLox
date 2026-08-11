@@ -137,7 +137,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn currentChunk(self: *Self) *Chunk {
-            return self.currentFunction.chunk;
+            return self.currentFunction.chunk.ptr();
         }
 
         fn emitByte(self: *Self, byte: u8) void {
@@ -528,11 +528,11 @@ pub fn Compiler(size: comptime_int) type {
                 self.lastError = err;
                 return;
             };
-            fun.name = self.objects.emplace(Obj.Type.String, &.{name}) catch |err| {
+            fun.set_name(self.objects.emplace(Obj.Type.String, &.{name}) catch |err| {
                 self.errorAtPrevious("Couldn't allocate function name");
                 self.lastError = err;
                 return;
-            };
+            });
 
             var compiler = Self.init_enclosed(self, fun);
 

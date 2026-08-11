@@ -89,10 +89,10 @@ fn constantInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, 
     print("{s:<32} {d:4} '{f}'\n", .{ name, constant, constval});
     if (print_fn and constval.is(Obj.Type.Function)) {
         const function = constval.obj.cast(.Function) catch unreachable;
-        if (function.name) |str| {
-            try disassembleChunk(function.chunk, str.slice());
+        if (function.name.valid()) {
+            try disassembleChunk(function.chunk.ptr(), function.name.ptr().slice());
         } else {
-            try disassembleChunk(function.chunk, "<anon>");
+            try disassembleChunk(function.chunk.ptr(), "<anon>");
         }
         
     }
@@ -127,10 +127,10 @@ fn closureInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, p
         off += 2;
     }
     if (print_fn) {
-        if (function.name) |str| {
-            try disassembleChunk(function.chunk, str.slice());
+        if (function.name.valid()) {
+            try disassembleChunk(function.chunk.ptr(), function.name.ptr().slice());
         } else {
-            try disassembleChunk(function.chunk, "<anon>");
+            try disassembleChunk(function.chunk.ptr(), "<anon>");
         }
     }
         

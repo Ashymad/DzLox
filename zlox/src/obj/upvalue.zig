@@ -2,6 +2,7 @@ const std = @import("std");
 
 const utils = @import("../comptime_utils.zig");
 const Value = @import("../value.zig").Value;
+const pack = @import("../packed.zig");
 
 pub fn Upvalue(fields: anytype) type {
     const Super = @import("../obj.zig").Obj(fields);
@@ -13,7 +14,7 @@ pub fn Upvalue(fields: anytype) type {
         pub const Error = error { OutOfMemory };
 
         obj: Super,
-        location: *Value,
+        location: pack.Packed(*Value),
         closed: bool,
         slot: u8,
 
@@ -21,7 +22,7 @@ pub fn Upvalue(fields: anytype) type {
             const self: *Self = try allocator.create(Self);
             self.* =  Self{
                 .obj = Super.make(Self),
-                .location = arg.val,
+                .location = pack.Packed(*Value).init(arg.val),
                 .closed = false,
                 .slot = arg.slot
             };
@@ -31,8 +32,8 @@ pub fn Upvalue(fields: anytype) type {
         pub fn close(self: *Self, allocator: std.mem.Allocator) Error!void {
             if (!self.closed) {
                 const new = try allocator.create(Value);
-                new.* = self.location.*;
-                self.location = new;
+                new.* = self.location.ptr().*;
+                self.location = pack.Packed(*Value).init(new);
                 self.closed = true;
             }
         }
@@ -43,7 +44,7 @@ pub fn Upvalue(fields: anytype) type {
         }
 
         pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
-            try writer.print("<Upvalue{{{f} at 0x{x}, {any}, {d}}}>", .{self.location.*, @intFromPtr(self.location), self.closed, self.slot});
+            try writer.print("<Upvalue{{{f} at 0x{x}, {any}, {d}}}>", .{self.location.ptr().*, self.location._ptr, self.closed, self.slot});
         }
 
         pub fn eql(_: *const Self, _: *const Self) bool {
@@ -51,7 +52,7 @@ pub fn Upvalue(fields: anytype) type {
         }
 
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
-            if (self.closed) allocator.destroy(self.location);
+            if (self.closed) allocator.destroy(self.location.ptr());
             allocator.destroy(self);
         }
     };

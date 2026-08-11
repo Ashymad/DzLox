@@ -5,16 +5,14 @@ const Value = @import("../value.zig").Value;
 pub const Error = GC.Obj.Native.Error;
 
 pub const Clock = struct {
-    var start: std.time.Instant = undefined;
+    var start: std.Io.Timestamp = undefined;
 
-    pub fn set_start() !void {
-        start = try std.time.Instant.now();
+    pub fn set_start(io: std.Io) void {
+        start = std.Io.Timestamp.now(io, std.Io.Clock.awake);
     }
 
-    pub fn clock(_: *GC, _: []const Value) Error!Value {
-        const now = std.time.Instant.now() catch return Error.Native;
-        const elapsed: f64 = @floatFromInt(now.since(start));
-        return Value.init(elapsed / std.time.ns_per_s);
+    pub fn clock(gc: *GC, _: []const Value) Error!Value {
+        return Value.init(@as(f64, @floatFromInt(std.Io.Timestamp.untilNow(start, gc.io, std.Io.Clock.awake).toSeconds())));
     }
 };
 
@@ -36,7 +34,7 @@ pub fn table(gc: *GC, args: []const Value) Error!Value {
 pub fn list(gc: *GC, args: []const Value) Error!Value {
     var lis = gc.emplace(.List, {}) catch return Error.Native;
     for (args) |arg| {
-        lis.list.push(arg) catch return Error.Native;
+        lis.list.ptr().push(arg) catch return Error.Native;
     }
     return Value.init(lis.cast());
 }

@@ -16,8 +16,8 @@
     // internet connectivity.
     .dependencies = .{
         .linenoise = .{
-            .url = "https://github.com/antirez/linenoise/archive/refs/heads/master.tar.gz",
-            .hash = "1220129271545fccd186dd1ce05c9ee7fb52c97cd86884e70597a0eef254a909e320",
+            .url = "https://github.com/antirez/linenoise/archive/a473823d74b93eab2ba83480df16ed37617493f2.zip",
+            .hash = "N-V-__8AAOJ5AgChoMZ8F65t1NdLCUv2YLyHpCZ1ydGIfwbc",
         },
     },
     .paths = .{

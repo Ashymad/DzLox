@@ -1,9 +1,19 @@
 const std = @import("std");
 
 pub fn copy_const(T: type, U: type) type {
-    comptime var info = @typeInfo(U);
-    info.pointer.is_const = @typeInfo(T).pointer.is_const;
-    return @Type(info);
+    const info = @typeInfo(U).pointer;
+    return @Pointer(
+        info.size,
+        std.builtin.Type.Pointer.Attributes{
+            .@"const" = @typeInfo(T).pointer.is_const,
+            .@"volatile" = info.is_volatile,
+            .@"allowzero" = info.is_allowzero,
+            .@"addrspace" = info.address_space,
+            .@"align" = info.alignment
+        },
+        info.child,
+        std.builtin.Type.Pointer.sentinel(info)
+    );
 }
 
 pub fn typeFromTag(T: type, comptime tag: std.meta.Tag(T)) type {
@@ -39,21 +49,30 @@ pub fn if_not_null(comptime fun: anytype) fn (?param_type(fun, 0)) void {
 }
 
 pub fn make_packed_t(s: type) type {
-    const oldFields = @typeInfo(s).@"struct".fields;
-    var newFields: [oldFields.len]std.builtin.Type.StructField = undefined;
+    const info = @typeInfo(s).@"struct";
+    const Attributes = std.builtin.Type.StructField.Attributes;
 
-    for (oldFields, &newFields) |oldField, *newField| {
-        newField.* = oldField;
-        newField.alignment = 0;
-        newField.is_comptime = false;
+    const attr = Attributes{
+        .@"align" = null,
+        .@"comptime" = false,
+    };
+
+    const attrs = [_]Attributes{attr} ** info.fields.len;
+    comptime var names: [info.fields.len][]const u8 = undefined;
+    comptime var types: [info.fields.len]type = undefined;
+    
+    inline for (info.fields, 0..) |field, i| {
+        names[i] = field.name;
+        types[i] = field.type;
     }
 
-    return @Type(std.builtin.Type{.@"struct" = .{
-        .layout = std.builtin.Type.ContainerLayout.@"packed",
-        .fields = &newFields,
-        .decls = &[_]std.builtin.Type.Declaration{},
-        .is_tuple = false
-    }});
+    return @Struct(
+        std.builtin.Type.ContainerLayout.@"packed",
+        info.backing_integer,
+        &names,
+        &types,
+        &attrs
+    );
 }
 
 pub fn make_packed(s: anytype) make_packed_t(@TypeOf(s)) {

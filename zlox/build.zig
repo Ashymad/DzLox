@@ -15,12 +15,36 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const linenoise_dep = b.dependency("linenoise", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const linenoise_tc = b.addTranslateC(.{
+        .root_source_file = linenoise_dep.path("linenoise.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const linenoise_mod = linenoise_tc.createModule();
+
+    linenoise_mod.addCSourceFile(.{
+        .file = linenoise_dep.path("linenoise.c"),
+        .language = .c,
+    });
+
     const exe = b.addExecutable(.{
         .name = "zlox",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{
+                .{
+                    .name = "linenoise",
+                    .module = linenoise_mod,
+                },
+            },
         }),
     });
 
@@ -52,15 +76,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const linenoise = b.dependency("linenoise", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe.addCSourceFile(.{ .file = linenoise.path("linenoise.c") });
-    exe.addIncludePath(linenoise.path(""));
-
-    exe.linkLibC();
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const unit_tests = b.addTest(.{

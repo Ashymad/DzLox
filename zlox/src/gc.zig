@@ -14,6 +14,7 @@ pub const GC = struct {
     const DBG_LOG = true;
 
     allocator: std.mem.Allocator,
+    io: std.Io,
     table: Obj.String.Table,
     list: List,
 
@@ -23,9 +24,10 @@ pub const GC = struct {
         }
     }
 
-    pub fn init(allocator: std.mem.Allocator) !Self {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !Self {
         return Self{
             .allocator = allocator,
+            .io = io,
             .table = Obj.String.Table.init(allocator),
             .list = List.init(allocator),
         };

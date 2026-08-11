@@ -55,8 +55,8 @@ pub const VM = struct {
 
         pub fn init(comptime tp: Obj.Type, callee: *const tp.get(), slots: [*]Value) @This() {
             return switch (tp) {
-                .Function => @This(){ .callee = callee.cast(), .ip = callee.chunk.code.data.ptr, .chunk = callee.chunk, .slots = slots },
-                .Closure => @This(){ .callee = callee.cast(), .ip = callee.function.chunk.code.data.ptr, .chunk = callee.function.chunk, .slots = slots },
+                .Function => @This(){ .callee = callee.cast(), .ip = callee.chunk.ptr().code.data.ptr, .chunk = callee.chunk.ptr(), .slots = slots },
+                .Closure => @This(){ .callee = callee.cast(), .ip = callee.function.ptr().chunk.ptr().code.data.ptr, .chunk = callee.function.ptr().chunk.ptr(), .slots = slots },
                 else => @compileError("Invalid type"),
             };
         }
@@ -68,15 +68,15 @@ pub const VM = struct {
         _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
     }
 
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        var self = @This(){ .globals = Globals.init(allocator), .objects = try GC.init(allocator), .allocator = allocator };
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
+        var self = @This(){ .globals = Globals.init(allocator), .objects = try GC.init(allocator, io), .allocator = allocator };
 
         try self.defineNative("clock", 0, 0, vm_native.Clock.clock);
         try self.defineNative("put", 1, 1, vm_native.put);
         try self.defineNative("table", 0, Obj.Native.ArityMax, vm_native.table);
         try self.defineNative("list", 0, Obj.Native.ArityMax, vm_native.list);
 
-        try vm_native.Clock.set_start();
+        vm_native.Clock.set_start(io);
 
         return self;
     }
@@ -87,7 +87,7 @@ pub const VM = struct {
 
         const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
-        if (dbg) try debug.disassembleChunk(function.chunk, "Main");
+        if (dbg) try debug.disassembleChunk(function.chunk.ptr(), "Main");
 
         try Interpreter(callstack_size, stack_size).run(self, function, dbg);
     }
@@ -178,8 +178,8 @@ pub const VM = struct {
             }
 
             fn callClosure(self: *@This(), callee: *Obj.Closure, argCount: u8) !void {
-                if (argCount != callee.function.arity) {
-                    self.runtimeError("Expected {d} arguments but got {d}", .{ callee.function.arity, argCount });
+                if (argCount != callee.function.ptr().arity) {
+                    self.runtimeError("Expected {d} arguments but got {d}", .{ callee.function.ptr().arity, argCount });
                     return InterpreterError.RuntimeError;
                 }
                 if (self.frameCount == callstack_size - 1)
@@ -338,12 +338,12 @@ pub const VM = struct {
                         @intFromEnum(OP.GET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
                             const index = self.read_byte();
-                            self.push(closure.upvalues[index].?.location.*);
+                            self.push(closure.upvalues.ptr()[index].?.location.ptr().*);
                         },
                         @intFromEnum(OP.SET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
                             const index = self.read_byte();
-                            closure.upvalues[index].?.location.* = self.peek(0);
+                            closure.upvalues.ptr()[index].?.location.ptr().* = self.peek(0);
                         },
                         @intFromEnum(OP.CLOSE_UPVALUE) => {
                             try self.closeUpvalues(self.current_slot());
@@ -399,14 +399,14 @@ pub const VM = struct {
                         @intFromEnum(OP.CLOSURE) => {
                             const function = try self.read_constant().obj.cast(.Function);
                             const closure = try self.vm.objects.emplace(.Closure, function);
-                            for (closure.upvalues[0..closure.upvalues_len]) |*upvalue| {
+                            for (closure.upvalues.ptr()[0..closure.upvalues_len]) |*upvalue| {
                                 const isLocal = self.read_byte();
                                 const slot = self.read_byte();
                                 if (isLocal == 1) {
                                     upvalue.* = try self.captureUpvalue(slot);
                                 } else {
                                     const callee = try self.frame().callee.cast(.Closure);
-                                    upvalue.* = callee.upvalues[slot];
+                                    upvalue.* = callee.upvalues.ptr()[slot];
                                 }
                             }
                             self.push(Value.init(closure.cast()));

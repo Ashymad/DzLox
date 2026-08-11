@@ -4,3 +4,4 @@ zig-out/
 .envrc
 .tool-versions
 .zig-cache/
+zig-pkg
