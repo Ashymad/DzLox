@@ -13,14 +13,14 @@ const hash = @import("hash.zig");
 const utils = @import("comptime_utils.zig");
 const vm_native = @import("vm/native.zig");
 
-pub const InterpreterError = Obj.Error || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
+const InterpreterError = Obj.Error || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     objects: GC,
     globals: Globals,
     allocator: std.mem.Allocator,
 
-    const Global = struct {
+    pub const Global = struct {
         val: Value,
         con: bool,
 
@@ -68,8 +68,18 @@ pub const VM = struct {
         _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
     }
 
+    fn gc_callback(self_ptr: *anyopaque) void {
+        const self: *@This() = @ptrCast(@alignCast(self_ptr));
+
+        GC.markTable(self.globals);
+    }
+
     pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
-        var self = @This(){ .globals = Globals.init(allocator), .objects = try GC.init(allocator, io), .allocator = allocator };
+        var self = @This(){
+            .globals = Globals.init(allocator),
+            .objects = try GC.init(allocator, io),
+            .allocator = allocator,
+        };
 
         try self.defineNative("clock", 0, 0, vm_native.Clock.clock);
         try self.defineNative("put", 1, 1, vm_native.put);
@@ -85,6 +95,9 @@ pub const VM = struct {
         const callstack_size = 64;
         const stack_size = 256;
 
+        self.objects.set_callback(&VM.gc_callback, self);
+        defer self.objects.reset_callback();
+
         const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
         if (dbg) try debug.disassembleChunk(function.chunk.ptr(), "Main");
@@ -95,6 +108,7 @@ pub const VM = struct {
     fn Interpreter(callstack_size: comptime_int, stack_size: comptime_int) type {
         return struct {
             const List = list.List(*Obj.Upvalue);
+            const Self = @This();
 
             frames: [callstack_size]CallFrame,
             frameCount: usize,
@@ -113,12 +127,21 @@ pub const VM = struct {
                     .open_upvalues = List.init(vm.allocator),
                 };
 
+                vm.objects.set_callback(&Self.gc_callback, &self);
+                defer vm.objects.reset_callback();
+
                 defer self.open_upvalues.free();
 
                 self.stackTop = &self.stack;
                 self.frames[0] = CallFrame.init(.Function, function, self.stackTop);
                 self.push(Value.init(function.cast()));
                 try self.execute(dbg);
+            }
+
+            pub fn gc_callback(self_ptr: *anyopaque) void {
+                const self: *@This() = @ptrCast(@alignCast(self_ptr));
+
+                VM.gc_callback(self.vm);
             }
 
             fn frame(self: anytype) utils.copy_const(@TypeOf(self), *CallFrame) {

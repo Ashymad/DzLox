@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn with_size(T: type, comptime size: std.builtin.Type.Pointer.Size) type {
+pub fn with_size(T: type, comptime size: std.lang.Type.Pointer.Size) type {
     return mod_ptr_t(T, "size", size);
 }
 
@@ -30,7 +30,7 @@ pub fn enum_len(T: type) usize {
 }
 
 pub fn is_type(T: type, comptime name: []const u8) bool {
-    return @as(std.meta.Tag(std.builtin.Type), @typeInfo(T)) == @field(std.meta.Tag(std.builtin.Type), name);
+    return @as(std.meta.Tag(std.lang.Type), @typeInfo(T)) == @field(std.meta.Tag(std.lang.Type), name);
 }
 
 pub fn typeFromTag(T: type, comptime tag: std.meta.Tag(T)) type {

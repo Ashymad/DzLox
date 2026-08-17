@@ -2,6 +2,8 @@ const std = @import("std");
 
 const list = @import("list.zig");
 const Value = @import("value.zig").Value;
+const utils = @import("comptime_utils.zig");
+const VM = @import("vm.zig").VM;
 
 pub const GC = struct {
     pub const Obj = @import("obj.zig").Obj(.{ .mark = false });
@@ -10,6 +12,9 @@ pub const GC = struct {
 
     const List = list.List(*Obj);
 
+    pub const CallbackArg = *anyopaque;
+    pub const Callback = *const fn (CallbackArg) void;
+
     const DBG_STRESS = true;
     const DBG_LOG = true;
 
@@ -17,6 +22,8 @@ pub const GC = struct {
     io: std.Io,
     table: Obj.String.Table,
     list: List,
+    callback: ?Callback,
+    callback_arg: ?CallbackArg,
 
     fn dbg_print(comptime fmt: []const u8, args: anytype) void {
         if (DBG_LOG) {
@@ -30,13 +37,29 @@ pub const GC = struct {
             .io = io,
             .table = Obj.String.Table.init(allocator),
             .list = List.init(allocator),
+            .callback = null,
+            .callback_arg = null,
         };
     }
 
     fn collect(self: *Self) void {
         dbg_print("Collection begin\n", .{});
-        _ = self;
+        if (self.callback) |callback| {
+            if (self.callback_arg) |callback_arg| {
+                callback(callback_arg);
+            }
+        }
         dbg_print("Collection end\n", .{});
+    }
+
+    pub fn set_callback(self: *Self, callback: Callback, callback_arg: CallbackArg) void {
+        self.callback = callback;
+        self.callback_arg = callback_arg;
+    }
+
+    pub fn reset_callback(self: *Self) void {
+        self.callback = null;
+        self.callback_arg = null;
     }
 
     pub fn emplace(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) (List.Error || tp.get().Error)!*tp.get() {
@@ -74,6 +97,9 @@ pub const GC = struct {
     pub fn mark(arg: anytype) void {
         const T = @TypeOf(arg);
         switch (T) {
+            VM.Global => {
+                mark(arg.val);
+            },
             Value => switch (arg) {
                 .obj => |o| {
                     mark(o);
@@ -83,6 +109,9 @@ pub const GC = struct {
             *Obj => {
                 dbg_print("Marking {any} at 0x{x}: {f}\n", .{ arg.type, @intFromPtr(arg), arg });
                 arg.fields.mark = true;
+            },
+            *const Obj => {
+                dbg_print("Skipping const {any} at 0x{x}: {f}\n", .{ arg.type, @intFromPtr(arg), arg });
             },
             else => if (Obj.isChild(T)) {
                 mark(arg.cast());
@@ -97,7 +126,7 @@ pub const GC = struct {
     pub fn deinit(self: *Self) void {
         while (true) {
             const el = self.list.pop() catch break;
-            dbg_print("Freeing {any} at 0x{x}\n", .{ el.type, @intFromPtr(el)});
+            dbg_print("Freeing {any} at 0x{x}\n", .{ el.type, @intFromPtr(el) });
             el.free(self.allocator);
         }
         self.list.free();

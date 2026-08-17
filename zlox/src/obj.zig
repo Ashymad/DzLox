@@ -42,8 +42,8 @@ pub fn Obj(fields: anytype) type {
         };
 
         pub fn isChild(T: type) bool {
-            inline for (@typeInfo(Type).@"enum".fields) |field| {
-                const U = @field(Self, field.name);
+            inline for (@typeInfo(Type).@"enum".field_names) |field| {
+                const U = @field(Self, field);
                 if (T == U or T == *U or T == *const U) return true;
             }
             return false;
