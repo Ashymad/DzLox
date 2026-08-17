@@ -45,7 +45,7 @@ pub const VM = struct {
         }
     };
 
-    const Globals = table.Table(*const Obj.String, Global, hash.hash_t(*const Obj.String), Obj.String.eql);
+    const Globals = table.Table(*Obj.String, Global, hash.hash_t(*Obj.String), Obj.String.eql);
 
     const CallFrame = struct {
         callee: *const Obj,
@@ -64,14 +64,24 @@ pub const VM = struct {
 
     fn defineNative(self: *@This(), name: []const u8, arity_min: u8, arity_max: u8, fun: Obj.Native.Fn) !void {
         const nameObj = try self.objects.emplace(.String, &.{name});
-        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{ .fun = fun, .name = name, .arity_min = arity_min, .arity_max = arity_max });
+        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{
+            .fun = fun,
+            .name = nameObj.slice(),
+            .arity_min = arity_min,
+            .arity_max = arity_max,
+        });
         _ = try self.globals.set(nameObj, Global.make_con(Value.init(funObj)));
     }
 
     fn gc_callback(self_ptr: *anyopaque) void {
         const self: *@This() = @ptrCast(@alignCast(self_ptr));
 
-        GC.markTable(self.globals);
+        self.globals.for_each({}, struct {
+            pub fn fun(name: *Obj.String, val: Global) void {
+                GC.mark(name);
+                GC.mark(val.val);
+            }
+        }.fun);
     }
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
@@ -176,7 +186,7 @@ pub const VM = struct {
                 return self.frame().chunk.constants.get(self.read_byte()) catch unreachable;
             }
 
-            fn read_string(self: *@This()) *const Obj.String {
+            fn read_string(self: *@This()) *Obj.String {
                 return self.read_constant().obj.cast(.String) catch unreachable;
             }
 

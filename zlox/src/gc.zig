@@ -96,10 +96,8 @@ pub const GC = struct {
 
     pub fn mark(arg: anytype) void {
         const T = @TypeOf(arg);
+
         switch (T) {
-            VM.Global => {
-                mark(arg.val);
-            },
             Value => switch (arg) {
                 .obj => |o| {
                     mark(o);
@@ -109,12 +107,20 @@ pub const GC = struct {
             *Obj => {
                 dbg_print("Marking {any} at 0x{x}: {f}\n", .{ arg.type, @intFromPtr(arg), arg });
                 arg.fields.mark = true;
+                switch (arg.type) {
+                    .Function => if ((arg.cast(.Function) catch unreachable).name.ptr()) |name| {
+                        mark(name);
+                    },
+                    else => {},
+                }
             },
             *const Obj => {
                 dbg_print("Skipping const {any} at 0x{x}: {f}\n", .{ arg.type, @intFromPtr(arg), arg });
             },
-            else => if (Obj.isChild(T)) {
+            else => if (comptime Obj.isChild(T)) {
                 mark(arg.cast());
+            } else {
+                @compileError("Unable to mark " ++ @typeName(T));
             },
         }
     }

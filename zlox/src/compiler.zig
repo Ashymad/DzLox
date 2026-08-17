@@ -716,7 +716,7 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            self.emitObj(.Native, Obj.Native.Arg{ .name = "switch", .fun = vm_native.table }) catch return;
+            self.emitObj(.Native, Obj.Native.Arg{ .name = "internal::switch", .fun = vm_native.table }) catch return;
 
             var jumpOver = self.emitJump(OP.JUMP);
             const switchExpression = self.currentChunk().code.len;

@@ -17,7 +17,7 @@ pub fn Function(fields: anytype) type {
         obj: Super,
         arity: u8,
         chunk: Packed(*chunk.Chunk),
-        name: Packed(?*const String),
+        name: Packed(?*String),
         type: Type,
         upvalue_count: u8,
 
@@ -27,7 +27,7 @@ pub fn Function(fields: anytype) type {
                 .obj = Super.make(Self),
                 .chunk = try Packed(*chunk.Chunk).create(allocator),
                 .arity = 0,
-                .name = Packed(?*const String).init(null),
+                .name = Packed(?*String).init(null),
                 .type = tp,
                 .upvalue_count = 0,
             };
@@ -35,8 +35,8 @@ pub fn Function(fields: anytype) type {
             return self;
         }
 
-        pub fn set_name(self: *Self, name: *const String) void {
-            self.name = Packed(?*const String).init(name);
+        pub fn set_name(self: *Self, name: *String) void {
+            self.name = Packed(?*String).init(name);
         }
 
         pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
