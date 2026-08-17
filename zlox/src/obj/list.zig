@@ -3,7 +3,7 @@ const std = @import("std");
 const Value = @import("../value.zig").Value;
 const utils = @import("../comptime_utils.zig");
 const list_zig = @import("../list.zig");
-const pack = @import("../packed.zig");
+const Packed = @import("../packed.zig").Packed;
 
 pub fn List(fields: anytype) type {
     const Super = @import("../obj.zig").Obj(fields);
@@ -13,18 +13,18 @@ pub fn List(fields: anytype) type {
 
         pub const List = list_zig.List(Value);
         pub const Arg = void;
-        pub const Error = error { OutOfMemory, InvalidArgument } || Self.List.Error;
+        pub const Error = error{ OutOfMemory, InvalidArgument } || Self.List.Error;
 
         obj: Super,
-        list: pack.Packed(*Self.List),
+        list: Packed(*Self.List),
 
         pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
-            self.* =  Self{
+            self.* = Self{
                 .obj = Super.make(Self),
-                .list = try pack.Packed(*Self.List).new(allocator)
+                .list = try Packed(*Self.List).create(allocator),
             };
-            self.list.ptr().* = Self.List.init(allocator);
+            self.list.set(Self.List.init(allocator));
             return self;
         }
 
@@ -46,10 +46,9 @@ pub fn List(fields: anytype) type {
                     }
                     if (this.count > 0) _ = try this.writer.write(", ");
                 }
-
             };
 
-            var printer = Printer{.writer = writer, .count = self.list.ptr().len};
+            var printer = Printer{ .writer = writer, .count = self.list.ptr().len };
 
             _ = try writer.write("[");
             try self.list.ptr().for_each_try(&printer, Printer.print);
@@ -62,7 +61,7 @@ pub fn List(fields: anytype) type {
 
         pub fn free(self: *Self, allocator: std.mem.Allocator) void {
             self.list.ptr().free();
-            self.list.free(allocator);
+            self.list.destroy(allocator);
             allocator.destroy(self);
         }
 

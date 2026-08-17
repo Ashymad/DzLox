@@ -9,6 +9,7 @@ const Obj = GC.Obj;
 const debug = @import("debug.zig");
 const Token = scanner.TokenType;
 const vm_native = @import("vm/native.zig");
+const utils = @import("comptime_utils.zig");
 
 pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 
@@ -78,7 +79,7 @@ pub fn Compiler(size: comptime_int) type {
         };
 
         const rules = init: {
-            var new: [@typeInfo(Token).@"enum".fields.len]ParseRule = undefined;
+            var new: [utils.enum_len(Token)]ParseRule = undefined;
             for (&new, 0..) |*v, i| {
                 const T = Token;
                 const S = Self;
@@ -952,11 +953,11 @@ pub fn Compiler(size: comptime_int) type {
                 .lastError = scanner.ScannerError.EmptyToken,
                 .currentFunction = fun,
                 .objects = objects,
-                .locals = [_]Local{Local{}} ** size,
+                .locals = @splat(Local{}),
                 .localCount = 1,
                 .scopeDepth = 0,
                 .enclosing = null,
-                .upvalues = [_]Upvalue{Upvalue{ .index = 0, .isLocal = false }} ** upvalues_size,
+                .upvalues = @splat(Upvalue{ .index = 0, .isLocal = false }),
             };
             self.locals[0].depth = 0;
             return self;

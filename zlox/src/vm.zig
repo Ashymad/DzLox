@@ -104,7 +104,14 @@ pub const VM = struct {
             open_upvalues: List,
 
             pub fn run(vm: *VM, function: *Obj.Function, dbg: bool) InterpreterError!void {
-                var self = @This(){ .frames = [_]CallFrame{undefined} ** callstack_size, .frameCount = 1, .stack = [_]Value{Value.init({})} ** stack_size, .stackTop = undefined, .vm = vm, .open_upvalues = List.init(vm.allocator) };
+                var self = @This(){
+                    .frames = @splat(undefined),
+                    .frameCount = 1,
+                    .stack = @splat(Value.init({})),
+                    .stackTop = undefined,
+                    .vm = vm,
+                    .open_upvalues = List.init(vm.allocator),
+                };
 
                 defer self.open_upvalues.free();
 
@@ -338,12 +345,12 @@ pub const VM = struct {
                         @intFromEnum(OP.GET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
                             const index = self.read_byte();
-                            self.push(closure.upvalues.ptr()[index].?.location.ptr().*);
+                            self.push(closure.upvalues.at(index).?.location.ptr().*);
                         },
                         @intFromEnum(OP.SET_UPVALUE) => {
                             const closure = try self.frame().callee.cast(.Closure);
                             const index = self.read_byte();
-                            closure.upvalues.ptr()[index].?.location.ptr().* = self.peek(0);
+                            closure.upvalues.at(index).?.location.ptr().* = self.peek(0);
                         },
                         @intFromEnum(OP.CLOSE_UPVALUE) => {
                             try self.closeUpvalues(self.current_slot());
@@ -399,14 +406,14 @@ pub const VM = struct {
                         @intFromEnum(OP.CLOSURE) => {
                             const function = try self.read_constant().obj.cast(.Function);
                             const closure = try self.vm.objects.emplace(.Closure, function);
-                            for (closure.upvalues.ptr()[0..closure.upvalues_len]) |*upvalue| {
+                            for (closure.upvalues.ptr()) |*upvalue| {
                                 const isLocal = self.read_byte();
                                 const slot = self.read_byte();
                                 if (isLocal == 1) {
                                     upvalue.* = try self.captureUpvalue(slot);
                                 } else {
                                     const callee = try self.frame().callee.cast(.Closure);
-                                    upvalue.* = callee.upvalues.ptr()[slot];
+                                    upvalue.* = callee.upvalues.at(slot);
                                 }
                             }
                             self.push(Value.init(closure.cast()));

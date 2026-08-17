@@ -1,30 +1,47 @@
 const std = @import("std");
 
+pub fn with_size(T: type, comptime size: std.builtin.Type.Pointer.Size) type {
+    return mod_ptr_t(T, "size", size);
+}
+
 pub fn copy_const(T: type, U: type) type {
-    const info = @typeInfo(U).pointer;
+    return mod_ptr_t(U, "const", @typeInfo(T).pointer.attrs.@"const");
+}
+
+pub fn mod_ptr_t(T: type, comptime field: []const u8, comptime val: anytype) type {
+    comptime var new = @typeInfo(T).pointer;
+
+    if (@hasField(std.lang.Type.Pointer.Attributes, field)) {
+        @field(new.attrs, field) = val;
+    } else {
+        @field(new, field) = val;
+    }
+
     return @Pointer(
-        info.size,
-        std.builtin.Type.Pointer.Attributes{
-            .@"const" = @typeInfo(T).pointer.is_const,
-            .@"volatile" = info.is_volatile,
-            .@"allowzero" = info.is_allowzero,
-            .@"addrspace" = info.address_space,
-            .@"align" = info.alignment
-        },
-        info.child,
-        std.builtin.Type.Pointer.sentinel(info)
+        new.size,
+        new.attrs,
+        new.child,
+        std.lang.Type.Pointer.sentinel(new),
     );
+}
+
+pub fn enum_len(T: type) usize {
+    return @typeInfo(T).@"enum".field_names.len;
+}
+
+pub fn is_type(T: type, comptime name: []const u8) bool {
+    return @as(std.meta.Tag(std.builtin.Type), @typeInfo(T)) == @field(std.meta.Tag(std.builtin.Type), name);
 }
 
 pub fn typeFromTag(T: type, comptime tag: std.meta.Tag(T)) type {
     return @TypeOf(@field(@unionInit(T, @tagName(tag), undefined), @tagName(tag)));
-
 }
 
 pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
-    inline for (@typeInfo(T).@"union".fields) |field| {
-        if (U == field.type) {
-            return @field(T, field.name);
+    const info = @typeInfo(T).@"union";
+    inline for (info.field_types, info.field_names) |field_type, field_name| {
+        if (U == field_type) {
+            return @field(T, field_name);
         }
     }
     @compileError("No matching tag for type " ++ @typeName(U) ++ " in Union " ++ @typeName(T));
@@ -48,41 +65,33 @@ pub fn if_not_null(comptime fun: anytype) fn (?param_type(fun, 0)) void {
     }.function;
 }
 
-pub fn make_packed_t(s: type) type {
+pub fn pack_t(s: type) type {
     const info = @typeInfo(s).@"struct";
-    const Attributes = std.builtin.Type.StructField.Attributes;
-
-    const attr = Attributes{
-        .@"align" = null,
-        .@"comptime" = false,
-    };
-
-    const attrs = [_]Attributes{attr} ** info.fields.len;
-    comptime var names: [info.fields.len][]const u8 = undefined;
-    comptime var types: [info.fields.len]type = undefined;
-    
-    inline for (info.fields, 0..) |field, i| {
-        names[i] = field.name;
-        types[i] = field.type;
-    }
+    const Attributes = std.lang.Type.Struct.FieldAttributes;
 
     return @Struct(
-        std.builtin.Type.ContainerLayout.@"packed",
+        std.lang.Type.ContainerLayout.@"packed",
         info.backing_integer,
-        &names,
-        &types,
-        &attrs
+        info.field_names,
+        info.field_types,
+        &@as(
+            [info.field_attrs.len]Attributes,
+            @splat(Attributes{
+                .@"align" = null,
+                .@"comptime" = false,
+            }),
+        ),
     );
 }
 
-pub fn make_packed(s: anytype) make_packed_t(@TypeOf(s)) {
+pub fn pack(s: anytype) pack_t(@TypeOf(s)) {
     const T = @TypeOf(s);
-    const fields = @typeInfo(T).@"struct".fields;
-    var packd: make_packed_t(T) = undefined;
+    const fields = @typeInfo(T).@"struct".field_names;
+    var packed_struct: pack_t(T) = undefined;
 
-    for (fields) |field| {
-        @field(packd, field.name) = @field(s, field.name);
+    inline for (fields) |field| {
+        @field(packed_struct, field) = @field(s, field);
     }
 
-    return packd;
+    return packed_struct;
 }

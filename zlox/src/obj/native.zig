@@ -3,7 +3,7 @@ const std = @import("std");
 const utils = @import("../comptime_utils.zig");
 const GC = @import("../gc.zig").GC;
 const Value = @import("../value.zig").Value;
-const pack = @import("../packed.zig");
+const Packed = @import("../packed.zig").Packed;
 
 pub fn Native(fields: anytype) type {
     const Super = @import("../obj.zig").Obj(fields);
@@ -20,21 +20,19 @@ pub fn Native(fields: anytype) type {
         pub const Arg = struct { fun: Fn, arity_min: u8 = ArityMin, arity_max: u8 = ArityMax, name: []const u8 = "" };
 
         obj: Super,
-        fun: pack.Packed(Fn),
+        fun: Packed(Fn),
         arity_min: u8,
         arity_max: u8,
-        name: pack.Packed([*]const u8),
-        name_len: usize,
+        name: Packed([]const u8),
 
         pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
             self.* = Self{
                 .obj = Super.make(Self),
-                .fun = pack.Packed(Fn).init(arg.fun),
+                .fun = Packed(Fn).init(arg.fun),
                 .arity_min = arg.arity_min,
                 .arity_max = arg.arity_max,
-                .name = pack.Packed([*]const u8).init(arg.name.ptr),
-                .name_len = arg.name.len
+                .name = Packed([]const u8).init(arg.name),
             };
             return self;
         }
@@ -50,7 +48,7 @@ pub fn Native(fields: anytype) type {
 
         pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             _ = try writer.write("<N: ");
-            _ = try writer.write(self.name.ptr()[0..self.name_len]);
+            _ = try writer.write(self.name.ptr());
             _ = try writer.writeAll(">");
         }
 

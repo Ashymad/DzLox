@@ -68,11 +68,11 @@ fn _disassembleInstruction(ch: *const chunk.Chunk, offset: usize, print_fn: bool
         @intFromEnum(OP.LOOP) => try jumpInstruction(name, false, ch, offset),
         @intFromEnum(OP.SET_INDEX) => simpleInstruction(name, offset),
         @intFromEnum(OP.GET_INDEX) => simpleInstruction(name, offset),
-        @intFromEnum(OP.CALL) => try byteInstruction(name, ch,  offset),
+        @intFromEnum(OP.CALL) => try byteInstruction(name, ch, offset),
         @intFromEnum(OP.CLOSURE) => try closureInstruction(name, ch, offset, print_fn),
         @intFromEnum(OP.CLOSE_UPVALUE) => simpleInstruction(name, offset),
         else => blk: {
-            print("Unknown opcode {d} {s}\n", .{op, name});
+            print("Unknown opcode {d} {s}\n", .{ op, name });
             break :blk offset + 1;
         },
     };
@@ -86,21 +86,20 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 fn constantInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, print_fn: bool) Error!usize {
     const constant = try ch.code.get(offset + 1);
     const constval = try ch.constants.get(constant);
-    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, constval});
+    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, constval });
     if (print_fn and constval.is(Obj.Type.Function)) {
         const function = constval.obj.cast(.Function) catch unreachable;
-        if (function.name.valid()) {
-            try disassembleChunk(function.chunk.ptr(), function.name.ptr().slice());
+        if (function.name.get()) |fn_name| {
+            try disassembleChunk(function.chunk.ptr(), fn_name.slice());
         } else {
             try disassembleChunk(function.chunk.ptr(), "<anon>");
         }
-        
     }
     return offset + 2;
 }
 
-fn byteInstruction(name: []const u8, ch:*const  chunk.Chunk, offset: usize) Error!usize {
-    print("{s:<32} {d:4}\n", .{name, try ch.code.get(offset+1)});
+fn byteInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize) Error!usize {
+    print("{s:<32} {d:4}\n", .{ name, try ch.code.get(offset + 1) });
     return offset + 2;
 }
 
@@ -109,7 +108,7 @@ fn jumpInstruction(name: []const u8, sign: bool, ch: *const chunk.Chunk, offset:
     const lsb: u16 = try ch.code.get(offset + 2);
     const jump = (msb << 8) | lsb;
 
-    print("{s:<32} {d:4} -> {d}\n", .{name, offset, if (sign) offset + 3 + jump else offset + 3 - jump});
+    print("{s:<32} {d:4} -> {d}\n", .{ name, offset, if (sign) offset + 3 + jump else offset + 3 - jump });
     return offset + 3;
 }
 
@@ -118,21 +117,21 @@ fn closureInstruction(name: []const u8, ch: *const chunk.Chunk, offset: usize, p
     const constant = try ch.code.get(off);
     const val = try ch.constants.get(constant);
     const function = try val.obj.cast(.Function);
-    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, function});
+    print("{s:<32} {d:4} '{f}'\n", .{ name, constant, function });
     for (0..function.upvalue_count) |_| {
         const isLocal = try ch.code.get(off + 1);
         const idx = try ch.code.get(off + 2);
         try print_offset(ch, off + 1);
-        print("{s:<38}|-> {s} {d}\n", .{ "", if (isLocal == 1) "local" else "upvalue", idx});
+        print("{s:<38}|-> {s} {d}\n", .{ "", if (isLocal == 1) "local" else "upvalue", idx });
         off += 2;
     }
     if (print_fn) {
-        if (function.name.valid()) {
-            try disassembleChunk(function.chunk.ptr(), function.name.ptr().slice());
+        if (function.name.get()) |fn_name| {
+            try disassembleChunk(function.chunk.ptr(), fn_name.slice());
         } else {
             try disassembleChunk(function.chunk.ptr(), "<anon>");
         }
     }
-        
+
     return off + 1;
 }

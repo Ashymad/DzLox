@@ -3,7 +3,7 @@ const utils = @import("comptime_utils.zig");
 
 fn nameOf(fqn: []const u8) []const u8 {
     var lastDot = 0;
-    for(fqn, 0..) |c, i| {
+    for (fqn, 0..) |c, i| {
         if (c == '.') lastDot = i + 1;
         if (c == '(') return fqn[lastDot..i];
     }
@@ -15,7 +15,7 @@ pub fn Obj(fields: anytype) type {
         const Self = @This();
 
         type: Type,
-        fields: utils.make_packed_t(@TypeOf(fields)) = utils.make_packed(fields),
+        fields: utils.pack_t(@TypeOf(fields)) = utils.pack(fields),
 
         pub const List = @import("obj/list.zig").List(fields);
         pub const String = @import("obj/string.zig").String(fields);
@@ -25,15 +25,7 @@ pub fn Obj(fields: anytype) type {
         pub const Closure = @import("obj/closure.zig").Closure(fields);
         pub const Upvalue = @import("obj/upvalue.zig").Upvalue(fields);
 
-        pub const Error = error {IllegalCastError}
-            || List.Error
-            || String.Error
-            || Table.Error
-            || Function.Error
-            || Native.Error
-            || List.Error
-            || Closure.Error
-            || Upvalue.Error;
+        pub const Error = error{IllegalCastError} || List.Error || String.Error || Table.Error || Function.Error || Native.Error || List.Error || Closure.Error || Upvalue.Error;
 
         pub const Type = enum(u8) {
             String,
@@ -50,7 +42,7 @@ pub fn Obj(fields: anytype) type {
         };
 
         pub fn isChild(T: type) bool {
-            inline for(@typeInfo(Type).@"enum".fields) |field| {
+            inline for (@typeInfo(Type).@"enum".fields) |field| {
                 const U = @field(Self, field.name);
                 if (T == U or T == *U or T == *const U) return true;
             }
@@ -58,7 +50,7 @@ pub fn Obj(fields: anytype) type {
         }
 
         pub fn make(child: type) Self {
-            return Self {
+            return Self{
                 .type = @field(Type, nameOf(@typeName(child))),
             };
         }

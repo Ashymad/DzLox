@@ -1,6 +1,6 @@
 const std = @import("std");
 const utils = @import("../comptime_utils.zig");
-const pack = @import("../packed.zig");
+const Packed = @import("../packed.zig").Packed;
 
 pub fn Closure(fields: anytype) type {
     const Super = @import("../obj.zig").Obj(fields);
@@ -9,23 +9,20 @@ pub fn Closure(fields: anytype) type {
         const Self = @This();
 
         pub const Arg = *const Super.Function;
-        pub const Error = error { OutOfMemory };
+        pub const Error = error{OutOfMemory};
 
         obj: Super,
-        function: pack.Packed(*const Super.Function),
-        upvalues: pack.Packed([*]?*Super.Upvalue),
-        upvalues_len: u8,
+        function: Packed(*const Super.Function),
+        upvalues: Packed([]?*Super.Upvalue),
 
         pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
-            self.* =  Self{
+            self.* = Self{
                 .obj = Super.make(Self),
-                .upvalues = pack.Packed([*]?*Super.Upvalue).init((try allocator.alloc(?*Super.Upvalue, arg.upvalue_count)).ptr),
-                .upvalues_len = arg.upvalue_count,
-                .function = pack.Packed(*const Super.Function).init(arg),
+                .upvalues = try Packed([]?*Super.Upvalue).alloc(allocator, arg.upvalue_count),
+                .function = Packed(*const Super.Function).init(arg),
             };
-            for(self.upvalues.ptr()[0..self.upvalues_len])
-                |*upvalue| upvalue.* = null;
+            for (self.upvalues.ptr()) |*upvalue| upvalue.* = null;
             return self;
         }
 
@@ -35,8 +32,8 @@ pub fn Closure(fields: anytype) type {
 
         pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
             _ = try writer.write("<C: ");
-            if (self.function.ptr().name.valid()) {
-                _ = try writer.write(self.function.ptr().name.ptr().slice());
+            if (self.function.ptr().name.get()) |fn_name| {
+                _ = try writer.write(fn_name.slice());
             } else {
                 _ = try writer.write("-");
             }
@@ -48,7 +45,7 @@ pub fn Closure(fields: anytype) type {
         }
 
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
-            allocator.free(self.upvalues.ptr()[0..self.upvalues_len]);
+            self.upvalues.destroy(allocator);
             allocator.destroy(self);
         }
     };

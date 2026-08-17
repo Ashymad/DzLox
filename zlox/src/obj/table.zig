@@ -3,7 +3,7 @@ const table = @import("../table.zig");
 const hash = @import("../hash.zig");
 const Value = @import("../value.zig").Value;
 const utils = @import("../comptime_utils.zig");
-const pack = @import("../packed.zig");
+const Packed = @import("../packed.zig").Packed;
 
 pub fn Table(fields: anytype) type {
     const Super = @import("../obj.zig").Obj(fields);
@@ -12,20 +12,20 @@ pub fn Table(fields: anytype) type {
         const Self = @This();
         pub const Arg = void;
         const Table = table.Table(Value, Value, hash.hash_t(Value), Value.eql);
-        pub const Error = error { OutOfMemory } || Self.Table.Error;
+        pub const Error = error{OutOfMemory} || Self.Table.Error;
 
         obj: Super,
-        table: pack.Packed(*Self.Table),
+        table: Packed(*Self.Table),
         len: usize,
 
         pub fn init(_: Arg, allocator: std.mem.Allocator) Error!*Self {
             const self: *Self = try allocator.create(Self);
-            self.* =  Self{
+            self.* = Self{
                 .obj = Super.make(Self),
-                .table = try pack.Packed(*Self.Table).new(allocator),
+                .table = try Packed(*Self.Table).create(allocator),
                 .len = 0,
             };
-            self.table.ptr().* = Self.Table.init(allocator);
+            self.table.set(Self.Table.init(allocator));
             return self;
         }
 
@@ -59,10 +59,9 @@ pub fn Table(fields: anytype) type {
                     try val.format(this.writer);
                     if (this.count > 0) _ = try this.writer.write(", ");
                 }
-
             };
 
-            var printer = Printer{.writer = writer, .count = self.len};
+            var printer = Printer{ .writer = writer, .count = self.len };
             _ = try writer.write("[");
             if (self.table.ptr().count > 0) {
                 try self.table.ptr().for_each_try(&printer, Printer.print);
@@ -78,7 +77,7 @@ pub fn Table(fields: anytype) type {
 
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
             self.table.ptr().deinit();
-            self.table.free(allocator);
+            self.table.destroy(allocator);
             allocator.destroy(self);
         }
     };
