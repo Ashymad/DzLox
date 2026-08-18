@@ -105,8 +105,8 @@ pub const VM = struct {
         const callstack_size = 64;
         const stack_size = 256;
 
-        self.objects.set_callback(&VM.gc_callback, self);
-        defer self.objects.reset_callback();
+        try self.objects.push_callback(&VM.gc_callback, self);
+        defer self.objects.pop_callback();
 
         const function = try compiler.Compiler(stack_size).compile(source, &self.objects);
 
@@ -137,8 +137,8 @@ pub const VM = struct {
                     .open_upvalues = List.init(vm.allocator),
                 };
 
-                vm.objects.set_callback(&Self.gc_callback, &self);
-                defer vm.objects.reset_callback();
+                try vm.objects.push_callback(&Self.gc_callback, &self);
+                defer vm.objects.pop_callback();
 
                 defer self.open_upvalues.free();
 
@@ -151,7 +151,10 @@ pub const VM = struct {
             pub fn gc_callback(self_ptr: *anyopaque) void {
                 const self: *@This() = @ptrCast(@alignCast(self_ptr));
 
-                VM.gc_callback(self.vm);
+                var stackPtr: [*]Value = &self.stack;
+                while (stackPtr != self.stackTop) : (stackPtr += 1) {
+                    GC.mark(stackPtr[0]);
+                }
             }
 
             fn frame(self: anytype) utils.copy_const(@TypeOf(self), *CallFrame) {

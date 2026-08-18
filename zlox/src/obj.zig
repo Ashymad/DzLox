@@ -59,7 +59,7 @@ pub fn Obj(fields: anytype) type {
             return (try tp.get().init(arg, allocator)).cast();
         }
 
-        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
+        pub fn format(self: anytype, writer: *std.Io.Writer) !void {
             switch (self.type) {
                 inline else => |tp| try self._cast(tp).format(writer),
             }

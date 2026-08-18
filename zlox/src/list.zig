@@ -27,7 +27,7 @@ pub fn List(T: type) type {
             };
         }
 
-        pub fn eql(self: *const Self, other: *const Self, eql_fn: fn(T, T) bool) bool {
+        pub fn eql(self: *const Self, other: *const Self, eql_fn: fn (T, T) bool) bool {
             if (self.len != other.len) return false;
             if (self.len == 0) return true;
             var tip1 = self.tip;
@@ -48,7 +48,9 @@ pub fn List(T: type) type {
         }
 
         pub fn free(self: *Self) void {
-            while (true) {_ = self.pop() catch return;}
+            while (true) {
+                _ = self.pop() catch return;
+            }
         }
 
         pub fn get(self: *const Self, index: usize) Error!T {
@@ -61,13 +63,13 @@ pub fn List(T: type) type {
 
             if (idx < idx_rev) {
                 var tip = self.tip;
-                while(idx > 1) : (idx -= 1) {
+                while (idx > 1) : (idx -= 1) {
                     tip = tip.?.next;
                 }
                 return tip.?.val orelse Error.IndexOutOfBounds;
             } else {
                 var end = self.end;
-                while(idx_rev > 1) : (idx_rev -= 1) {
+                while (idx_rev > 1) : (idx_rev -= 1) {
                     end = end.?.prev;
                 }
                 return end.?.val orelse Error.IndexOutOfBounds;
@@ -81,20 +83,20 @@ pub fn List(T: type) type {
             var isNewVal = false;
 
             if (idx <= 0) {
-                while(idx < 0) : (idx += 1) {
+                while (idx < 0) : (idx += 1) {
                     try self._push(null);
                 }
                 try self._push(val);
                 isNewVal = true;
             } else if (idx < idx_rev) {
                 var tip = self.tip;
-                while(idx > 1) : (idx -= 1) {
+                while (idx > 1) : (idx -= 1) {
                     tip = tip.?.next;
                 }
                 tip.?.val = val;
             } else {
                 var end = self.end;
-                while(idx_rev > 1) : (idx_rev -= 1) {
+                while (idx_rev > 1) : (idx_rev -= 1) {
                     end = end.?.prev;
                 }
                 end.?.val = val;
@@ -116,30 +118,30 @@ pub fn List(T: type) type {
         }
 
         pub fn insert_before(self: *Self, element: ?*Element, val: T) Error!void {
-            if(element) |el| {
-                if(el.prev) |prev| {
+            if (element) |el| {
+                if (el.prev) |prev| {
                     const new = try self.allocator.create(Element);
-                    new.* = .{.val = val, .next = el, .prev = prev};
+                    new.* = .{ .val = val, .next = el, .prev = prev };
                     prev.next = new;
                     el.prev = new;
                     self.len += 1;
                     return;
-                }       
-            } 
+                }
+            }
             try self.push(val);
         }
 
         pub fn insert_after(self: *Self, element: ?*Element, val: T) Error!void {
-            if(element) |el| {
-                if(el.next) |next| {
+            if (element) |el| {
+                if (el.next) |next| {
                     const new = try self.allocator.create(Element);
-                    new.* = .{.val = val, .next = next, .prev = el};
+                    new.* = .{ .val = val, .next = next, .prev = el };
                     next.prev = new;
                     el.next = new;
                     self.len += 1;
                     return;
-                }       
-            } 
+                }
+            }
             try self.push_end(val);
         }
 
@@ -177,7 +179,7 @@ pub fn List(T: type) type {
             if (self.tip) |old_tip| {
                 old_tip.prev = new_tip;
             }
-            new_tip.* = Element{.val = val, .next = self.tip, .prev = null};
+            new_tip.* = Element{ .val = val, .next = self.tip, .prev = null };
             self.tip = new_tip;
             self.len += 1;
         }
@@ -194,7 +196,7 @@ pub fn List(T: type) type {
             if (self.end) |old_end| {
                 old_end.next = new_end;
             }
-            new_end.* = Element{.val = val, .prev = self.end, .next = null};
+            new_end.* = Element{ .val = val, .prev = self.end, .next = null };
             self.end = new_end;
             self.len += 1;
         }
@@ -203,7 +205,7 @@ pub fn List(T: type) type {
             return self._push_end(val);
         }
 
-        pub fn for_each(self: *const Self, arg: anytype, fun: fn (@TypeOf(arg), ?T) void) void {
+        pub fn for_each(self: *const Self, arg: anytype, fun: if (@TypeOf(arg) == void) fn (?T) void else fn (@TypeOf(arg), ?T) void) void {
             var end = self.end;
             while (end) |el| : (end = el.prev) {
                 if (@TypeOf(arg) == void)

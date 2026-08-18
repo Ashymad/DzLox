@@ -12,7 +12,7 @@ pub const Clock = struct {
     }
 
     pub fn clock(gc: *GC, _: []const Value) Error!Value {
-        return Value.init(@as(f64, @floatFromInt(std.Io.Timestamp.untilNow(start, gc.io, std.Io.Clock.awake).toSeconds())));
+        return Value.init(@as(f64, @floatFromInt(std.Io.Timestamp.untilNow(start, gc.io, std.Io.Clock.awake).toMilliseconds())));
     }
 };
 

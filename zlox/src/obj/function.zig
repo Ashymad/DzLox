@@ -48,7 +48,7 @@ pub fn Function(fields: anytype) type {
                 .Function => _ = try writer.write("<F: "),
                 .Script => _ = try writer.write("<S: "),
             }
-            if (self.name.get()) |name| {
+            if (self.name.ptr()) |name| {
                 _ = try writer.write(name.slice());
             } else {
                 _ = try writer.write("-");

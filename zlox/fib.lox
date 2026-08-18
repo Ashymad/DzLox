@@ -18,15 +18,12 @@ fun printf(fmt, args) {
 }
 
 fun main() {
-    con num = 25;
+    con num = 28;
     con start = clock();
+    con result = fib(num);
+    con end = clock() - start;
 
-    con args = [];
-    args[0] = num;
-    args[1] = fib(num);
-    args[2] = clock() - start;
-
-    printf("fib({}) == {}, time: {}", args);
+    printf("fib({}) == {}, time: {} ms", [num, result, end]);
 }
 
 main();

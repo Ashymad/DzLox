@@ -11,7 +11,7 @@ pub fn String(fields: anytype) type {
         const Self = @This();
         pub const Table = table.Table(*Self, void, hash.hash_t(*const Self), Self.eql);
         pub const Arg = []const []const u8;
-        pub const Error = error { OutOfMemory, IndexOutOfBounds } || Table.Error;
+        pub const Error = error{ OutOfMemory, IndexOutOfBounds } || Table.Error;
 
         obj: Super,
         len: usize = 0,
@@ -21,6 +21,7 @@ pub fn String(fields: anytype) type {
             const p: utils.copy_const(@TypeOf(self), [*]u8) = @ptrCast(self);
             return p + @sizeOf(Self);
         }
+
         fn new(arg: Arg, params: ArgParams, allocator: std.mem.Allocator) Error!*Self {
             const ret: *Self = @ptrCast(try allocator.alignedAlloc(u8, std.mem.Alignment.of(Self), @sizeOf(Self) + params.len));
             ret.* = Self{
@@ -65,7 +66,7 @@ pub fn String(fields: anytype) type {
                     var idx: usize = 0;
                     for (self.arg) |el| {
                         if (!std.mem.eql(u8, k2.data()[idx .. idx + el.len], el))
-                        return false;
+                            return false;
                         idx += el.len;
                     }
                     return true;
