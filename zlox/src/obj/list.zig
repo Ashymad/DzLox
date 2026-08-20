@@ -32,26 +32,16 @@ pub fn List(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
-            const Printer = struct {
-                writer: @TypeOf(writer),
-                count: usize,
-
-                pub fn print(this: *@This(), val: ?Value) std.Io.Writer.Error!void {
-                    this.count -= 1;
-                    if (val) |v| {
-                        try v.format(this.writer);
-                    } else {
-                        _ = try this.writer.write("-");
-                    }
-                    if (this.count > 0) _ = try this.writer.write(", ");
-                }
-            };
-
-            var printer = Printer{ .writer = writer, .count = self.list.ptr().len };
+        pub fn format(self: *const Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            var iter = self.list.ptr().iter();
+            var count = self.list.ptr().len();
 
             _ = try writer.write("[");
-            try self.list.ptr().for_each_try(&printer, Printer.print);
+            while (iter.next()) |val| {
+                count -= 1;
+                try val.format(writer);
+                if (count > 0) _ = try writer.write(", ");
+            }
             _ = try writer.writeAll("]");
         }
 
@@ -67,25 +57,26 @@ pub fn List(fields: anytype) type {
 
         pub fn delete(self: *Self, index: Value) void {
             var list = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len)) or index.number < 0) {
+            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len()))) {
                 return;
             }
-            list.delete(@intFromFloat(index.number));
+            _ = list.pop(@intFromFloat(index.number)) catch return;
         }
 
         pub fn get(self: *const Self, index: Value) Error!Value {
             var list = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len)) or index.number < 0) {
+            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len()))) {
                 return Error.InvalidArgument;
             }
             return list.get(@intFromFloat(index.number));
         }
 
         pub fn set(self: *Self, index: Value, val: Value) Error!void {
-            if (!index.is(Value.number) or index.number < 0) {
+            if (!index.is(Value.number)) {
                 return Error.InvalidArgument;
             }
-            _ = try self.list.ptr().set(@intFromFloat(index.number), val);
+            _ = self.list.ptr().set(@intFromFloat(index.number), val) catch
+                try self.list.ptr().push(@intFromFloat(index.number), val);
         }
     };
 }

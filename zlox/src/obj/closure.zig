@@ -8,11 +8,11 @@ pub fn Closure(fields: anytype) type {
     return packed struct {
         const Self = @This();
 
-        pub const Arg = *const Super.Function;
+        pub const Arg = *Super.Function;
         pub const Error = error{OutOfMemory};
 
         obj: Super,
-        function: Packed(*const Super.Function),
+        function: Packed(*Super.Function),
         upvalues: Packed([]?*Super.Upvalue),
 
         pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {
@@ -20,7 +20,7 @@ pub fn Closure(fields: anytype) type {
             self.* = Self{
                 .obj = Super.make(Self),
                 .upvalues = try Packed([]?*Super.Upvalue).alloc(allocator, arg.upvalue_count),
-                .function = Packed(*const Super.Function).init(arg),
+                .function = Packed(*Super.Function).init(arg),
             };
             for (self.upvalues.ptr()) |*upvalue| upvalue.* = null;
             return self;

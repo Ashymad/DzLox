@@ -48,12 +48,12 @@ pub const VM = struct {
     const Globals = table.Table(*Obj.String, Global, hash.hash_t(*Obj.String), Obj.String.eql);
 
     const CallFrame = struct {
-        callee: *const Obj,
+        callee: *Obj,
         ip: [*]const u8,
         slots: [*]Value,
         chunk: *const Chunk,
 
-        pub fn init(comptime tp: Obj.Type, callee: *const tp.get(), slots: [*]Value) @This() {
+        pub fn init(comptime tp: Obj.Type, callee: *tp.get(), slots: [*]Value) @This() {
             return switch (tp) {
                 .Function => @This(){ .callee = callee.cast(), .ip = callee.chunk.ptr().code.data.ptr, .chunk = callee.chunk.ptr(), .slots = slots },
                 .Closure => @This(){ .callee = callee.cast(), .ip = callee.function.ptr().chunk.ptr().code.data.ptr, .chunk = callee.function.ptr().chunk.ptr(), .slots = slots },
@@ -76,10 +76,10 @@ pub const VM = struct {
     fn gc_callback(self_ptr: *anyopaque) void {
         const self: *@This() = @ptrCast(@alignCast(self_ptr));
 
-        self.globals.for_each({}, struct {
-            pub fn fun(name: *Obj.String, val: Global) void {
-                GC.mark(name);
-                GC.mark(val.val);
+        self.globals.for_each(self, struct {
+            pub fn fun(this: @TypeOf(self), name: *Obj.String, val: Global) void {
+                this.objects.mark("G", name);
+                this.objects.mark("G", val.val);
             }
         }.fun);
     }
@@ -151,9 +151,19 @@ pub const VM = struct {
             pub fn gc_callback(self_ptr: *anyopaque) void {
                 const self: *@This() = @ptrCast(@alignCast(self_ptr));
 
-                var stackPtr: [*]Value = &self.stack;
-                while (stackPtr != self.stackTop) : (stackPtr += 1) {
-                    GC.mark(stackPtr[0]);
+                var stack_ptr: [*]Value = &self.stack;
+                while (stack_ptr != self.stackTop) : (stack_ptr += 1) {
+                    self.vm.objects.mark("S", stack_ptr[0]);
+                }
+
+                var frame_idx: usize = 0;
+                while (frame_idx < self.frameCount) : (frame_idx += 1) {
+                    self.vm.objects.mark("F", self.frames[frame_idx].callee);
+                }
+
+                var iter = self.open_upvalues.iter();
+                while (iter.next()) |upval| {
+                    self.vm.objects.mark("U", upval);
                 }
             }
 
@@ -254,25 +264,29 @@ pub const VM = struct {
             }
 
             fn captureUpvalue(self: *@This(), slot: u8) !*Obj.Upvalue {
-                var upvalue = self.open_upvalues.tip;
-                while (upvalue) |el| : (upvalue = el.next) {
-                    const val = el.val.?;
+                var iter = self.open_upvalues.iter();
+
+                while (iter.next()) |val| {
                     if (val.slot == slot)
                         return val;
                     if (val.slot > slot)
                         break;
                 }
+                _ = iter.next();
+
                 const new = try self.vm.objects.emplace(.Upvalue, .{ .val = &self.frame().slots[slot], .slot = slot });
-                try self.open_upvalues.insert_after(upvalue, new);
+                try iter.push(new);
                 return new;
             }
 
             fn closeUpvalues(self: *@This(), slot: u8) !void {
-                while (self.open_upvalues.tip) |el| {
-                    if (el.val.?.slot < slot) break;
+                var iter = self.open_upvalues.iter();
 
-                    const upval = self.open_upvalues.pop() catch unreachable;
+                while (iter.next()) |upval| {
+                    if (upval.slot < slot) break;
+
                     try upval.close(self.vm.allocator);
+                    iter.pop();
                 }
             }
 

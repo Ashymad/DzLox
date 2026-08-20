@@ -103,7 +103,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             }
         }
 
-        pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun)!void {
+        pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun).?!void {
             for (self.entries) |entry| {
                 switch (entry) {
                     .some => |some| if (@TypeOf(arg) == void)

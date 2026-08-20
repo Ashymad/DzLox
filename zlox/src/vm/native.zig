@@ -34,7 +34,7 @@ pub fn table(gc: *GC, args: []const Value) Error!Value {
 pub fn list(gc: *GC, args: []const Value) Error!Value {
     var lis = gc.emplace(.List, {}) catch return Error.Native;
     for (args) |arg| {
-        lis.list.ptr().push(arg) catch return Error.Native;
+        lis.list.ptr().push(-1, arg) catch return Error.Native;
     }
     return Value.init(lis.cast());
 }

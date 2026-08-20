@@ -5,7 +5,7 @@ pub fn with_size(T: type, comptime size: std.lang.Type.Pointer.Size) type {
 }
 
 pub fn copy_const(T: type, U: type) type {
-    return mod_ptr_t(U, "const", @typeInfo(T).pointer.attrs.@"const");
+    return mod_ptr_t(U, "const", is_const(T));
 }
 
 pub fn mod_ptr_t(T: type, comptime field: []const u8, comptime val: anytype) type {
@@ -33,6 +33,10 @@ pub fn is_type(T: type, comptime name: []const u8) bool {
     return @as(std.meta.Tag(std.lang.Type), @typeInfo(T)) == @field(std.meta.Tag(std.lang.Type), name);
 }
 
+pub fn is_const(T: type) bool {
+    return @typeInfo(T).pointer.attrs.@"const";
+}
+
 pub fn typeFromTag(T: type, comptime tag: std.meta.Tag(T)) type {
     return @TypeOf(@field(@unionInit(T, @tagName(tag), undefined), @tagName(tag)));
 }
@@ -47,8 +51,10 @@ pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
     @compileError("No matching tag for type " ++ @typeName(U) ++ " in Union " ++ @typeName(T));
 }
 
-pub fn fn_error(comptime fun: anytype) type {
-    return @typeInfo(@typeInfo(@TypeOf(fun)).@"fn".return_type.?).error_union.error_set;
+pub fn fn_error(comptime fun: anytype) ?type {
+    const return_type = @typeInfo(@TypeOf(fun)).@"fn".return_type.?;
+
+    return if (is_type(return_type, "error_union")) @typeInfo(return_type).error_union.error_set else null;
 }
 
 pub fn param_type(comptime fun: anytype, idx: comptime_int) type {

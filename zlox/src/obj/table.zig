@@ -11,7 +11,7 @@ pub fn Table(fields: anytype) type {
     return packed struct {
         const Self = @This();
         pub const Arg = void;
-        const Table = table.Table(Value, Value, hash.hash_t(Value), Value.eql);
+        pub const Table = table.Table(Value, Value, hash.hash_t(Value), Value.eql);
         pub const Error = error{OutOfMemory} || Self.Table.Error;
 
         obj: Super,

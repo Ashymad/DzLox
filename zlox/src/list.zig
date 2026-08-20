@@ -1,227 +1,223 @@
 const std = @import("std");
 const utils = @import("comptime_utils.zig");
 
+fn sign(v: anytype) @TypeOf(v) {
+    return if (v >= 0) 1 else -1;
+}
+
 pub fn List(T: type) type {
     return struct {
         const Self = @This();
 
         pub const Error = error{ OutOfMemory, IndexOutOfBounds, Empty };
+        pub const Value = T;
 
         const Element = struct {
-            val: ?T,
-            next: ?*@This(),
-            prev: ?*@This(),
+            val: Value,
+            next: *@This(),
+            prev: *@This(),
+
+            fn jmp(self: *Element, idx: isize) *Element {
+                var ret = self;
+
+                for (0..@abs(idx)) |_| {
+                    ret = if (idx > 0) ret.next else ret.prev;
+                }
+
+                return ret;
+            }
+
+            pub fn del(self: *Element, gpa: std.mem.Allocator) void {
+                self.next.prev = self.prev;
+                self.prev.next = self.next;
+
+                gpa.destroy(self);
+            }
+
+            fn init(gpa: std.mem.Allocator, prv: ?*Element, nxt: ?*Element, val: Value) !*Element {
+                const ret = try gpa.create(Element);
+                ret.* = Element{
+                    .prev = prv orelse ret,
+                    .next = nxt orelse ret,
+                    .val = val,
+                };
+                return ret;
+            }
+
+            pub fn add_prev(self: *Element, gpa: std.mem.Allocator, val: Value) !void {
+                self.prev.next = try Element.init(gpa, self.prev, self, val);
+                self.prev = self.prev.next;
+                if (self.next == self) self.next = self.prev;
+            }
+
+            pub fn add_next(self: *Element, gpa: std.mem.Allocator, val: Value) !void {
+                self.next.prev = try Element.init(gpa, self, self.next, val);
+                self.next = self.next.prev;
+                if (self.prev == self) self.prev = self.next;
+            }
+
+            pub fn new(gpa: std.mem.Allocator, val: Value) !*Element {
+                return try Element.init(gpa, null, null, val);
+            }
         };
 
-        len: usize,
-        tip: ?*Element,
-        end: ?*Element,
-        allocator: std.mem.Allocator,
+        pub fn Iterator(@"const": bool) type {
+            return struct {
+                const Super = utils.mod_ptr_t(*Self, "const", @"const");
+                const This = utils.mod_ptr_t(*Element, "const", @"const");
 
-        pub fn init(allocator: std.mem.Allocator) Self {
-            return Self{
-                .len = 0,
-                .tip = null,
-                .end = null,
-                .allocator = allocator,
+                super: Super,
+                this: ?This,
+
+                pub fn new(sup: Super) @This() {
+                    return .{
+                        .super = sup,
+                        .this = sup.tip,
+                    };
+                }
+
+                pub fn next(self: *@This()) ?Value {
+                    if (self.this) |el| {
+                        self.this = if (el.next == self.super.tip) null else el.next;
+                        return el.val;
+                    } else {
+                        return null;
+                    }
+                }
+
+                pub fn pop(self: *@This()) void {
+                    if (@"const") @compileError("Cannot call pop() on a const Iterator");
+
+                    const el = if (self.this) |el| el.prev else self.super.tip orelse return;
+
+                    if (self.this == el) self.this = null;
+
+                    self.super.del(el);
+                }
+
+                pub fn push(self: *@This(), val: Value) !void {
+                    if (@"const") @compileError("Cannot call push() on a const Iterator");
+
+                    if (self.this) |el| {
+                        try self.super.insert(false, el, val);
+                    } else if (self.super.tip) |el| {
+                        try self.super.insert(true, el.prev, val);
+                    } else {
+                        try self.super.begin(val);
+                    }
+                }
             };
         }
 
-        pub fn eql(self: *const Self, other: *const Self, eql_fn: fn (T, T) bool) bool {
-            if (self.len != other.len) return false;
-            if (self.len == 0) return true;
-            var tip1 = self.tip;
-            var tip2 = other.tip;
-            while (tip1) |el1| : (tip1 = el1.next) {
-                if (el1.val) |val1| {
-                    if (tip2.?.val) |val2| {
-                        if (!eql_fn(val1, val2)) return false;
-                    } else {
-                        return false;
-                    }
-                } else if (tip2.?.val) |_| {
-                    return false;
-                }
-                tip2 = tip2.?.next;
+        _len: isize,
+        tip: ?*Element,
+
+        gpa: std.mem.Allocator,
+
+        pub fn iter(self: anytype) Iterator(utils.is_const(@TypeOf(self))) {
+            return Iterator(utils.is_const(@TypeOf(self))).new(self);
+        }
+
+        pub fn init(gpa: std.mem.Allocator) Self {
+            return Self{
+                ._len = 0,
+                .tip = null,
+                .gpa = gpa,
+            };
+        }
+
+        pub fn len(self: *const Self) usize {
+            return @intCast(self._len);
+        }
+
+        pub fn eql(self: *const Self, other: *const Self, eql_fn: fn (Value, Value) bool) bool {
+            if (self._len != other._len) return false;
+
+            var iter1 = self.iter();
+            var iter2 = other.iter();
+
+            while (iter1.next()) |val1| {
+                if (!eql_fn(val1, iter2.next().?)) return false;
             }
+
             return true;
         }
 
         pub fn free(self: *Self) void {
             while (true) {
-                _ = self.pop() catch return;
+                _ = self.pop(-1) catch break;
             }
         }
 
-        pub fn get(self: *const Self, index: usize) Error!T {
-            if (index >= self.len) {
-                return Error.IndexOutOfBounds;
-            }
-            var idx_rev: usize = index;
-            var idx = self.len - idx_rev;
-            idx_rev += 1;
-
-            if (idx < idx_rev) {
-                var tip = self.tip;
-                while (idx > 1) : (idx -= 1) {
-                    tip = tip.?.next;
-                }
-                return tip.?.val orelse Error.IndexOutOfBounds;
-            } else {
-                var end = self.end;
-                while (idx_rev > 1) : (idx_rev -= 1) {
-                    end = end.?.prev;
-                }
-                return end.?.val orelse Error.IndexOutOfBounds;
-            }
-        }
-
-        fn _set(self: *Self, index: usize, val: ?T) Error!bool {
-            var idx_rev: isize = @intCast(index);
-            var idx: isize = @as(isize, @intCast(self.len)) - idx_rev;
-            idx_rev += 1;
-            var isNewVal = false;
-
-            if (idx <= 0) {
-                while (idx < 0) : (idx += 1) {
-                    try self._push(null);
-                }
-                try self._push(val);
-                isNewVal = true;
-            } else if (idx < idx_rev) {
-                var tip = self.tip;
-                while (idx > 1) : (idx -= 1) {
-                    tip = tip.?.next;
-                }
-                tip.?.val = val;
-            } else {
-                var end = self.end;
-                while (idx_rev > 1) : (idx_rev -= 1) {
-                    end = end.?.prev;
-                }
-                end.?.val = val;
-            }
-            return isNewVal;
-        }
-
-        pub fn set(self: *Self, index: usize, val: T) Error!bool {
-            return self._set(index, val);
-        }
-
-        pub fn delete(self: *Self, index: usize) void {
-            if (index >= self.len) return;
-            if (index == self.len - 1) {
-                _ = self.pop() catch unreachable;
-            } else {
-                _ = self._set(index, null) catch unreachable;
-            }
-        }
-
-        pub fn insert_before(self: *Self, element: ?*Element, val: T) Error!void {
-            if (element) |el| {
-                if (el.prev) |prev| {
-                    const new = try self.allocator.create(Element);
-                    new.* = .{ .val = val, .next = el, .prev = prev };
-                    prev.next = new;
-                    el.prev = new;
-                    self.len += 1;
-                    return;
-                }
-            }
-            try self.push(val);
-        }
-
-        pub fn insert_after(self: *Self, element: ?*Element, val: T) Error!void {
-            if (element) |el| {
-                if (el.next) |next| {
-                    const new = try self.allocator.create(Element);
-                    new.* = .{ .val = val, .next = next, .prev = el };
-                    next.prev = new;
-                    el.next = new;
-                    self.len += 1;
-                    return;
-                }
-            }
-            try self.push_end(val);
-        }
-
-        fn _pop(self: *Self) Error!?T {
+        fn _at(self: *Self, idx: isize) Error!*Element {
             if (self.tip) |tip| {
-                if (tip.next) |next| {
-                    next.prev = null;
-                    self.tip = next;
-                } else {
-                    self.tip = null;
-                    self.end = null;
-                }
-                self.len -= 1;
-                const val = tip.val;
-                self.allocator.destroy(tip);
-                return val;
-            }
-            return Error.Empty;
-        }
-
-        pub fn pop(self: *Self) Error!T {
-            const val = try self._pop();
-            while (self.tip) |tip| {
-                if (tip.val) |_| break;
-                _ = self._pop() catch unreachable;
-            }
-            return val.?;
-        }
-
-        fn _push(self: *Self, val: ?T) Error!void {
-            const new_tip = try self.allocator.create(Element);
-            if (self.end == null) {
-                self.end = new_tip;
-            }
-            if (self.tip) |old_tip| {
-                old_tip.prev = new_tip;
-            }
-            new_tip.* = Element{ .val = val, .next = self.tip, .prev = null };
-            self.tip = new_tip;
-            self.len += 1;
-        }
-
-        pub fn push(self: *Self, val: T) Error!void {
-            return self._push(val);
-        }
-
-        fn _push_end(self: *Self, val: ?T) Error!void {
-            const new_end = try self.allocator.create(Element);
-            if (self.tip == null) {
-                self.tip = new_end;
-            }
-            if (self.end) |old_end| {
-                old_end.next = new_end;
-            }
-            new_end.* = Element{ .val = val, .prev = self.end, .next = null };
-            self.end = new_end;
-            self.len += 1;
-        }
-
-        pub fn push_end(self: *Self, val: T) Error!void {
-            return self._push_end(val);
-        }
-
-        pub fn for_each(self: *const Self, arg: anytype, fun: if (@TypeOf(arg) == void) fn (?T) void else fn (@TypeOf(arg), ?T) void) void {
-            var end = self.end;
-            while (end) |el| : (end = el.prev) {
-                if (@TypeOf(arg) == void)
-                    fun(el.val)
-                else
-                    fun(arg, el.val);
+                const haf: isize = sign(idx) * @divTrunc(self._len, 2);
+                return tip.jmp(@rem(idx + haf, self._len) - haf);
+            } else {
+                return Error.Empty;
             }
         }
 
-        pub fn for_each_try(self: *const Self, arg: anytype, fun: anytype) utils.fn_error(fun)!void {
-            var end = self.end;
-            while (end) |el| : (end = el.prev) {
-                if (@TypeOf(arg) == void)
-                    try fun(el.val)
-                else
-                    try fun(arg, el.val);
+        fn at(self: *Self, idx: isize) Error!*Element {
+            return if (@abs(idx) >= self._len and idx < -self._len)
+                Error.IndexOutOfBounds
+            else
+                try self._at(idx);
+        }
+
+        pub fn set(self: *Self, idx: isize, val: Value) Error!void {
+            (try self.at(idx)).val = val;
+        }
+
+        pub fn get(self: *Self, idx: isize) Error!Value {
+            return (try self.at(idx)).val;
+        }
+
+        fn del(self: *Self, el: *Element) void {
+            self._len -= 1;
+
+            if (self.tip == el) {
+                self.tip = if (el.next == el) null else el.next;
+            }
+
+            el.del(self.gpa);
+        }
+
+        pub fn pop(self: *Self, idx: isize) Error!Value {
+            const el = try self.at(idx);
+            const ret = el.val;
+
+            self.del(el);
+
+            return ret;
+        }
+
+        fn begin(self: *Self, val: Value) !void {
+            if (self.tip) |_| @panic("This function can only be called on an empty list");
+
+            self.tip = try Element.new(self.gpa, val);
+            self._len = 1;
+        }
+
+        fn insert(self: *Self, after: bool, anchor: *Element, val: Value) !void {
+            if (after) {
+                try anchor.add_next(self.gpa, val);
+            } else {
+                try anchor.add_prev(self.gpa, val);
+
+                if (self.tip == anchor) self.tip = anchor.prev;
+            }
+
+            self._len += 1;
+        }
+
+        pub fn push(self: *Self, idx: isize, val: Value) Error!void {
+            if (@abs(idx) > self._len and idx < -self._len - 1) {
+                return Error.IndexOutOfBounds;
+            } else {
+                const el = self._at(idx) catch return self.begin(val);
+
+                try self.insert(idx < 0, el, val);
             }
         }
     };

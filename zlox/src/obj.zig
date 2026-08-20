@@ -41,10 +41,9 @@ pub fn Obj(fields: anytype) type {
             }
         };
 
-        pub fn isChild(T: type) bool {
-            inline for (@typeInfo(Type).@"enum".field_names) |field| {
-                const U = @field(Self, field);
-                if (T == U or T == *U or T == *const U) return true;
+        pub fn is_child(T: type) bool {
+            inline for (std.meta.tags(Type)) |tag| {
+                if (*tag.get() == T) return true;
             }
             return false;
         }

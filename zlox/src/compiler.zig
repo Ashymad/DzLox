@@ -971,10 +971,22 @@ pub fn Compiler(size: comptime_int) type {
             return enclosed;
         }
 
+        fn gc_callback(self_ptr: *anyopaque) void {
+            var self: *@This() = @ptrCast(@alignCast(self_ptr));
+
+            self.objects.mark("C", self.currentFunction);
+            while (self.enclosing) |enclosed| : (self = enclosed) {
+                self.objects.mark("C", enclosed.currentFunction);
+            }
+        }
+
         pub fn compile(source: []const u8, objects: *GC) CompilerError!*Obj.Function {
             var scan = try scanner.Scanner.init(source);
             const fun = try objects.emplace(Obj.Type.Function, Obj.Function.Type.Script);
             var self = Self.init(&scan, objects, fun);
+
+            try objects.push_callback(&gc_callback, &self);
+            defer objects.pop_callback();
 
             self.advance();
 
