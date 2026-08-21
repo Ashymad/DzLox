@@ -2,15 +2,6 @@ const std = @import("std");
 
 const utils = @import("lib::utils.zig");
 
-fn nameOf(fqn: []const u8) []const u8 {
-    var lastDot = 0;
-    for (fqn, 0..) |c, i| {
-        if (c == '.') lastDot = i + 1;
-        if (c == '(') return fqn[lastDot..i];
-    }
-    return fqn;
-}
-
 pub fn Obj(fields: anytype) type {
     return packed struct {
         const Self = @This();
@@ -42,6 +33,15 @@ pub fn Obj(fields: anytype) type {
             }
         };
 
+        fn child_name(fqn: []const u8) []const u8 {
+            var lastDot = 0;
+            for (fqn, 0..) |c, i| {
+                if (c == '.') lastDot = i + 1;
+                if (c == '(') return fqn[lastDot..i];
+            }
+            return fqn;
+        }
+
         pub fn is_child(T: type) bool {
             inline for (std.meta.tags(Type)) |tag| {
                 if (*tag.get() == T) return true;
@@ -51,7 +51,7 @@ pub fn Obj(fields: anytype) type {
 
         pub fn make(child: type) Self {
             return Self{
-                .type = @field(Type, nameOf(@typeName(child))),
+                .type = @field(Type, child_name(@typeName(child))),
             };
         }
 

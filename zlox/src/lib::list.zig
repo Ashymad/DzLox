@@ -2,10 +2,6 @@ const std = @import("std");
 
 const utils = @import("lib::utils.zig");
 
-fn sign(v: anytype) @TypeOf(v) {
-    return if (v >= 0) 1 else -1;
-}
-
 pub fn List(T: type) type {
     return struct {
         const Self = @This();
@@ -152,7 +148,7 @@ pub fn List(T: type) type {
 
         fn _at(self: *Self, idx: isize) Error!*Element {
             if (self.tip) |tip| {
-                const haf: isize = sign(idx) * @divTrunc(self._len, 2);
+                const haf: isize = utils.sign(idx) * @divTrunc(self._len, 2);
                 return tip.jmp(@rem(idx + haf, self._len) - haf);
             } else {
                 return Error.Empty;

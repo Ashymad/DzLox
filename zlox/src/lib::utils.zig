@@ -1,5 +1,9 @@
 const std = @import("std");
 
+pub fn sign(v: anytype) @TypeOf(v) {
+    return if (v >= 0) 1 else -1;
+}
+
 pub fn with_size(T: type, comptime size: std.lang.Type.Pointer.Size) type {
     return mod_ptr_t(T, "size", size);
 }
