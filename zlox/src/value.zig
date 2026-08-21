@@ -1,7 +1,9 @@
 const std = @import("std");
-const array = @import("array.zig");
+
+const array = @import("lib::array.zig");
+const utils = @import("lib::utils.zig");
+
 const Obj = @import("gc.zig").GC.Obj;
-const utils = @import("comptime_utils.zig");
 
 pub const Value = union(enum) {
     number: f64,
@@ -39,7 +41,6 @@ pub const Value = union(enum) {
     pub fn init(val: anytype) Self {
         return @unionInit(Self, tagNameOf(@TypeOf(val)), val);
     }
-
 
     fn toTag(comptime from: anytype) Tag {
         return if (@TypeOf(from) == Obj.Type)

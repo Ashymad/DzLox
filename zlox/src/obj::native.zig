@@ -1,12 +1,14 @@
 const std = @import("std");
 
-const utils = @import("../comptime_utils.zig");
-const GC = @import("../gc.zig").GC;
-const Value = @import("../value.zig").Value;
-const Packed = @import("../packed.zig").Packed;
+const utils = @import("lib::utils.zig");
+
+const Packed = @import("lib::packed.zig").Packed;
+const GC = @import("gc.zig").GC;
+const Value = @import("value.zig").Value;
+const Obj = @import("obj.zig").Obj;
 
 pub fn Native(fields: anytype) type {
-    const Super = @import("../obj.zig").Obj(fields);
+    const Super = Obj(fields);
 
     return packed struct {
         const Self = @This();

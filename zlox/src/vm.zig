@@ -1,19 +1,22 @@
-const Chunk = @import("chunk.zig").Chunk;
-const OP = @import("chunk.zig").OP;
-const Value = @import("value.zig").Value;
 const std = @import("std");
+
+const table = @import("lib::table.zig");
+const list = @import("lib::list.zig");
+const utils = @import("lib::utils.zig");
+const callbacks = @import("vm::callbacks.zig");
+const native = @import("vm::native.zig");
 const debug = @import("debug.zig");
 const compiler = @import("compiler.zig");
+const hash = @import("hash.zig");
+const chunk = @import("chunk.zig");
+
+const Chunk = chunk.Chunk;
+const OP = chunk.OP;
+const Value = @import("value.zig").Value;
 const GC = @import("gc.zig").GC;
 const Obj = GC.Obj;
-const Callback = @import("vm/callbacks.zig");
-const table = @import("table.zig");
-const list = @import("list.zig");
-const hash = @import("hash.zig");
-const utils = @import("comptime_utils.zig");
-const vm_native = @import("vm/native.zig");
 
-const InterpreterError = Obj.Error || compiler.CompilerError || Callback.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
+const InterpreterError = Obj.Error || compiler.CompilerError || callbacks.Error || error{ CompileError, RuntimeError, StackOverflow, IndexOutOfBounds, Overflow, DivisionByZero };
 
 pub const VM = struct {
     objects: GC,
@@ -91,12 +94,12 @@ pub const VM = struct {
             .allocator = allocator,
         };
 
-        try self.defineNative("clock", 0, 0, vm_native.Clock.clock);
-        try self.defineNative("put", 1, 1, vm_native.put);
-        try self.defineNative("table", 0, Obj.Native.ArityMax, vm_native.table);
-        try self.defineNative("list", 0, Obj.Native.ArityMax, vm_native.list);
+        try self.defineNative("clock", 0, 0, native.Clock.clock);
+        try self.defineNative("put", 1, 1, native.put);
+        try self.defineNative("table", 0, Obj.Native.ArityMax, native.table);
+        try self.defineNative("list", 0, Obj.Native.ArityMax, native.list);
 
-        vm_native.Clock.set_start(io);
+        native.Clock.set_start(io);
 
         return self;
     }
@@ -252,12 +255,12 @@ pub const VM = struct {
                 self.frames[self.frameCount - 1] = CallFrame.init(.Function, callee, self.stackTop - argCount - 1);
             }
 
-            fn callNative(self: *@This(), native: *Obj.Native, argCount: u8) !void {
-                if (argCount < native.arity_min or argCount > native.arity_max) {
-                    self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{ native.arity_min, native.arity_max, argCount });
+            fn callNative(self: *@This(), obj: *Obj.Native, argCount: u8) !void {
+                if (argCount < obj.arity_min or argCount > obj.arity_max) {
+                    self.runtimeError("Expected from {d} to {d} arguments but got {d}", .{ obj.arity_min, obj.arity_max, argCount });
                     return InterpreterError.RuntimeError;
                 }
-                const result = try native.call(&self.vm.objects, argCount, self.stackTop - argCount);
+                const result = try obj.call(&self.vm.objects, argCount, self.stackTop - argCount);
                 self.stackTop -= argCount + 1;
                 self.push(result);
                 return;
@@ -290,7 +293,7 @@ pub const VM = struct {
                 }
             }
 
-            fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: Callback.Type(in_tag, out_tag)) InterpreterError!void {
+            fn binary_op(self: *@This(), comptime in_tag: anytype, comptime out_tag: anytype, op: callbacks.Type(in_tag, out_tag)) InterpreterError!void {
                 const b = self.pop();
                 const a = self.pop();
                 if (a.is(in_tag) and b.is(in_tag)) {
@@ -347,9 +350,9 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.ADD) => {
                             if (self.peek(0).is(Obj.Type.String)) {
-                                try self.binary_op(Obj.Type.String, Obj.Type.String, Callback.concatenate(&self.vm.objects));
+                                try self.binary_op(Obj.Type.String, Obj.Type.String, callbacks.concatenate(&self.vm.objects));
                             } else {
-                                try self.binary_op(Value.number, Value.number, Callback.add);
+                                try self.binary_op(Value.number, Value.number, callbacks.add);
                             }
                         },
                         @intFromEnum(OP.JUMP_IF_FALSE) => {
@@ -470,14 +473,14 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
-                        @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, Callback.sub),
-                        @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, Callback.mul),
-                        @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, Callback.div),
+                        @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, callbacks.sub),
+                        @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, callbacks.mul),
+                        @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, callbacks.div),
                         @intFromEnum(OP.TRUE) => self.push(Value.init(true)),
                         @intFromEnum(OP.FALSE) => self.push(Value.init(false)),
                         @intFromEnum(OP.EQUAL) => self.push(Value.init(self.pop().eql(self.pop()))),
-                        @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, Callback.less),
-                        @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, Callback.more),
+                        @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, callbacks.less),
+                        @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, callbacks.more),
                         @intFromEnum(OP.NIL) => self.push(Value.init({})),
                         @intFromEnum(OP.NOT) => self.push(Value.init(!self.pop().isTruthy())),
                         else => return InterpreterError.CompileError,

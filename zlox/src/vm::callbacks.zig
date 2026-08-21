@@ -1,12 +1,12 @@
 const std = @import("std");
-const GC = @import("../gc.zig").GC;
+
+const GC = @import("gc.zig").GC;
 const Obj = GC.Obj;
-const Value = @import("../value.zig").Value;
+const Value = @import("value.zig").Value;
+pub const Error = Obj.Error;
 
 const Number = Value.tagType(.number);
 const Bool = Value.tagType(.bool);
-
-pub const Error = Obj.Error;
 
 pub fn Type(comptime in_tag: anytype, comptime out_tag: anytype) type {
     if (@TypeOf(in_tag) == Obj.Type) {

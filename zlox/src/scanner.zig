@@ -156,7 +156,7 @@ pub const Scanner = struct {
 
     fn char(self: *@This()) Token {
         if (self.isAtEnd()) return self.makeToken(ScannerError.UnterminatedChar);
-        _  = self.advance();
+        _ = self.advance();
         if (self.isAtEnd() or self.peek() != '\'') return self.makeToken(ScannerError.UnterminatedChar);
         _ = self.advance();
 

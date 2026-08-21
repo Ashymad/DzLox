@@ -1,10 +1,11 @@
 const std = @import("std");
+
 const chunk = @import("chunk.zig");
 const value = @import("value.zig");
-const Obj = @import("gc.zig").GC.Obj;
-const print = std.debug.print;
 
+const Obj = @import("gc.zig").GC.Obj;
 const Error = Obj.Error;
+const print = std.debug.print;
 
 pub fn disassembleChunk(ch: *const chunk.Chunk, name: []const u8) Error!void {
     print("/= {s} =\\\n", .{name});

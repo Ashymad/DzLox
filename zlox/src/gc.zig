@@ -1,8 +1,9 @@
 const std = @import("std");
 
-const list = @import("list.zig");
+const list = @import("lib::list.zig");
+const utils = @import("lib::utils.zig");
+
 const Value = @import("value.zig").Value;
-const utils = @import("comptime_utils.zig");
 const VM = @import("vm.zig").VM;
 
 pub const GC = struct {

@@ -1,6 +1,8 @@
 const std = @import("std");
+
+const array = @import("lib::array.zig");
+
 const Value = @import("value.zig").Value;
-const array = @import("array.zig");
 
 pub const OP = enum(u8) {
     CONSTANT,
@@ -35,7 +37,7 @@ pub const OP = enum(u8) {
     GET_INDEX,
     CALL,
     CLOSURE,
-    CLOSE_UPVALUE
+    CLOSE_UPVALUE,
 };
 
 pub const Chunk = struct {

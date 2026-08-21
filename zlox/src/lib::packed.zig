@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("comptime_utils.zig");
+
+const utils = @import("lib::utils.zig");
 
 pub fn Packed(Type: type) type {
     return packed struct {

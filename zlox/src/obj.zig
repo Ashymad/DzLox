@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("comptime_utils.zig");
+
+const utils = @import("lib::utils.zig");
 
 fn nameOf(fqn: []const u8) []const u8 {
     var lastDot = 0;
@@ -17,13 +18,13 @@ pub fn Obj(fields: anytype) type {
         type: Type,
         fields: utils.pack_t(@TypeOf(fields)) = utils.pack(fields),
 
-        pub const List = @import("obj/list.zig").List(fields);
-        pub const String = @import("obj/string.zig").String(fields);
-        pub const Table = @import("obj/table.zig").Table(fields);
-        pub const Function = @import("obj/function.zig").Function(fields);
-        pub const Native = @import("obj/native.zig").Native(fields);
-        pub const Closure = @import("obj/closure.zig").Closure(fields);
-        pub const Upvalue = @import("obj/upvalue.zig").Upvalue(fields);
+        pub const List = @import("obj::list.zig").List(fields);
+        pub const String = @import("obj::string.zig").String(fields);
+        pub const Table = @import("obj::table.zig").Table(fields);
+        pub const Function = @import("obj::function.zig").Function(fields);
+        pub const Native = @import("obj::native.zig").Native(fields);
+        pub const Closure = @import("obj::closure.zig").Closure(fields);
+        pub const Upvalue = @import("obj::upvalue.zig").Upvalue(fields);
 
         pub const Error = error{IllegalCastError} || List.Error || String.Error || Table.Error || Function.Error || Native.Error || List.Error || Closure.Error || Upvalue.Error;
 

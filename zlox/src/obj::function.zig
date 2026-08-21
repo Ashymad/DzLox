@@ -1,10 +1,13 @@
 const std = @import("std");
-const chunk = @import("../chunk.zig");
-const utils = @import("../comptime_utils.zig");
-const Packed = @import("../packed.zig").Packed;
+
+const utils = @import("lib::utils.zig");
+const chunk = @import("chunk.zig");
+
+const Packed = @import("lib::packed.zig").Packed;
+const Obj = @import("obj.zig").Obj;
 
 pub fn Function(fields: anytype) type {
-    const Super = @import("../obj.zig").Obj(fields);
+    const Super = Obj(fields);
     const String = Super.String;
 
     return packed struct {

@@ -1,11 +1,14 @@
 const std = @import("std");
-const table = @import("../table.zig");
-const hash = @import("../hash.zig");
-const utils = @import("../comptime_utils.zig");
-const value = @import("../value.zig");
+
+const table = @import("lib::table.zig");
+const utils = @import("lib::utils.zig");
+const hash = @import("hash.zig");
+const value = @import("value.zig");
+
+const Obj = @import("obj.zig").Obj;
 
 pub fn String(fields: anytype) type {
-    const Super = @import("../obj.zig").Obj(fields);
+    const Super = Obj(fields);
 
     return packed struct {
         const Self = @This();

@@ -1,15 +1,19 @@
 const std = @import("std");
+
+const vm_native = @import("vm::native.zig");
+const utils = @import("lib::utils.zig");
 const scanner = @import("scanner.zig");
-const Chunk = @import("chunk.zig").Chunk;
-const OP = @import("chunk.zig").OP;
-const Value = @import("value.zig").Value;
-const ValueArray = @import("value.zig").ValueArray;
+const debug = @import("debug.zig");
+const chunk = @import("chunk.zig");
+const value = @import("value.zig");
+
+const Token = scanner.TokenType;
+const Chunk = chunk.Chunk;
+const OP = chunk.OP;
+const Value = value.Value;
+const ValueArray = value.ValueArray;
 const GC = @import("gc.zig").GC;
 const Obj = GC.Obj;
-const debug = @import("debug.zig");
-const Token = scanner.TokenType;
-const vm_native = @import("vm/native.zig");
-const utils = @import("comptime_utils.zig");
 
 pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
 

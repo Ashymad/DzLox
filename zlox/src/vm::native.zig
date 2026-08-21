@@ -1,6 +1,7 @@
 const std = @import("std");
-const GC = @import("../gc.zig").GC;
-const Value = @import("../value.zig").Value;
+
+const GC = @import("gc.zig").GC;
+const Value = @import("value.zig").Value;
 
 pub const Error = GC.Obj.Native.Error;
 

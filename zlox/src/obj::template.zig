@@ -1,15 +1,17 @@
 const std = @import("std");
 
-const utils = @import("../comptime_utils.zig");
+const utils = @import("lib::utils.zig");
+
+const Obj = @import("obj.zig").Obj;
 
 pub fn Template(fields: anytype) type {
-    const Super = @import("../obj.zig").Obj(fields);
+    const Super = Obj(fields);
 
     return packed struct {
         const Self = @This();
 
         pub const Arg = void;
-        pub const Error = error { OutOfMemory };
+        pub const Error = error{OutOfMemory};
 
         obj: Super,
         pub fn init(arg: Arg, allocator: std.mem.Allocator) Error!*Self {

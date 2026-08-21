@@ -1,17 +1,19 @@
 const std = @import("std");
 
-const Value = @import("../value.zig").Value;
-const utils = @import("../comptime_utils.zig");
-const list_zig = @import("../list.zig");
-const Packed = @import("../packed.zig").Packed;
+const utils = @import("lib::utils.zig");
+const list = @import("lib::list.zig");
+
+const Packed = @import("lib::packed.zig").Packed;
+const Value = @import("value.zig").Value;
+const Obj = @import("obj.zig").Obj;
 
 pub fn List(fields: anytype) type {
-    const Super = @import("../obj.zig").Obj(fields);
+    const Super = Obj(fields);
 
     return packed struct {
         const Self = @This();
 
-        pub const List = list_zig.List(Value);
+        pub const List = list.List(Value);
         pub const Arg = void;
         pub const Error = error{ OutOfMemory, InvalidArgument } || Self.List.Error;
 
@@ -33,8 +35,9 @@ pub fn List(fields: anytype) type {
         }
 
         pub fn format(self: *const Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            var iter = self.list.ptr().iter();
-            var count = self.list.ptr().len();
+            var lis = self.list.ptr();
+            var iter = lis.iter();
+            var count = lis.len();
 
             _ = try writer.write("[");
             while (iter.next()) |val| {
@@ -56,27 +59,28 @@ pub fn List(fields: anytype) type {
         }
 
         pub fn delete(self: *Self, index: Value) void {
-            var list = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len()))) {
+            var lis = self.list.ptr();
+            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(lis.len()))) {
                 return;
             }
-            _ = list.pop(@intFromFloat(index.number)) catch return;
+            _ = lis.pop(@intFromFloat(index.number)) catch return;
         }
 
         pub fn get(self: *const Self, index: Value) Error!Value {
-            var list = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(list.len()))) {
+            var lis = self.list.ptr();
+            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(lis.len()))) {
                 return Error.InvalidArgument;
             }
-            return list.get(@intFromFloat(index.number));
+            return lis.get(@intFromFloat(index.number));
         }
 
         pub fn set(self: *Self, index: Value, val: Value) Error!void {
+            var lis = self.list.ptr();
             if (!index.is(Value.number)) {
                 return Error.InvalidArgument;
             }
-            _ = self.list.ptr().set(@intFromFloat(index.number), val) catch
-                try self.list.ptr().push(@intFromFloat(index.number), val);
+            _ = lis.set(@intFromFloat(index.number), val) catch
+                try lis.push(@intFromFloat(index.number), val);
         }
     };
 }

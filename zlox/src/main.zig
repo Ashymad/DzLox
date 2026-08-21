@@ -1,6 +1,7 @@
 const std = @import("std");
+const linenoise = @import("linenoise");
+
 const vm = @import("vm.zig");
-const Linenoise = @import("linenoise");
 
 pub fn main(init: std.process.Init) anyerror!u8 {
     const allocator = init.gpa;
@@ -37,13 +38,13 @@ pub fn repl(allocator: std.mem.Allocator, io: std.Io, dbg: bool) anyerror!void {
     var VM = try vm.VM.init(allocator, io);
     defer VM.deinit();
 
-    _ = Linenoise.linenoiseHistorySetMaxLen(100);
+    _ = linenoise.linenoiseHistorySetMaxLen(100);
 
-    while (Linenoise.linenoise("lox> ")) |line| {
-        defer Linenoise.linenoiseFree(line);
+    while (linenoise.linenoise("lox> ")) |line| {
+        defer linenoise.linenoiseFree(line);
         VM.interpret(std.mem.span(line), dbg) catch |err| {
             std.debug.print("\nError: {any}\n", .{err});
         };
-        _ = Linenoise.linenoiseHistoryAdd(line);
+        _ = linenoise.linenoiseHistoryAdd(line);
     }
 }

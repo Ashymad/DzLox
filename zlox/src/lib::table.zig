@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("comptime_utils.zig");
+
+const utils = @import("lib::utils.zig");
 
 pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type {
     return struct {

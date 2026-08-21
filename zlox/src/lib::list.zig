@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("comptime_utils.zig");
+
+const utils = @import("lib::utils.zig");
 
 fn sign(v: anytype) @TypeOf(v) {
     return if (v >= 0) 1 else -1;
