@@ -138,3 +138,19 @@ pub fn pack(s: anytype) pack_t(@TypeOf(s)) {
 
     return packed_struct;
 }
+
+pub fn enumFromStruct(str: type, backing: type) type {
+    const field_names = @typeInfo(str).@"struct".field_names;
+
+    comptime var field_values: [field_names.len]backing = undefined;
+
+    for (&field_values, 0..) |*pt, i|
+        pt.* = i;
+
+    return @Enum(
+        backing,
+        std.lang.Type.Enum.Mode.exhaustive,
+        field_names,
+        &field_values,
+    );
+}
