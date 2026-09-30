@@ -50,14 +50,6 @@ pub fn Native(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(_: *const Self, writer: *std.Io.Writer) !void {
-            _ = try writer.write("<Builtin>");
-        }
-
-        pub fn eql(_: *const Self, _: *const Self) bool {
-            return false;
-        }
-
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
             allocator.destroy(self);
         }

@@ -70,11 +70,11 @@ pub const VM = struct {
         }
     };
 
-    fn defineNative(self: *@This(), name: []const u8, arity_min: u8, arity_max: u8, fun: Obj.Native.Fn) !void {
-        const nameObj = try self.objects.emplace(.String, &.{name});
+    fn defineNative(self: *@This(), comptime name: []const u8, arity_min: u8, arity_max: u8, fun: Obj.Native.Fn) !void {
+        const nameObj = try self.objects.emplace(.String, null, &.{name});
         GC.exclude(nameObj.cast());
 
-        const funObj = try self.objects.emplace_cast(.Native, Obj.Native.Arg{
+        const funObj = try self.objects.emplace_cast(.Native, "B::" ++ name, Obj.Native.Arg{
             .fun = fun,
             .arity_min = arity_min,
             .arity_max = arity_max,
@@ -102,7 +102,7 @@ pub const VM = struct {
             .initializer = undefined,
         };
 
-        self.initializer = try self.objects.emplace(.String, &.{"init"});
+        self.initializer = try self.objects.emplace(.String, null, &.{"init"});
 
         GC.exclude(self.initializer.cast());
 
@@ -160,7 +160,7 @@ pub const VM = struct {
 
                 self.push(Value.init(chunk.cast()));
 
-                const function = try vm.objects.emplace(.Function, .{ .type = .Script, .chunk = chunk });
+                const function = try vm.objects.emplace(.Function, null, .{ .chunk = chunk });
                 _ = self.pop();
                 self.push(Value.init(function.cast()));
 
@@ -255,7 +255,7 @@ pub const VM = struct {
             }
 
             fn callClass(self: *@This(), callee: *Obj.Class, argCount: u8) !void {
-                const instance = try self.vm.objects.emplace(.Instance, callee);
+                const instance = try self.vm.objects.emplace(.Instance, GC.name_of(callee.cast()), callee);
 
                 const initializer = instance.method(&self.vm.objects, self.vm.initializer) catch
                     if (argCount != 0) {
@@ -291,7 +291,7 @@ pub const VM = struct {
                 return;
             }
 
-            fn captureUpvalue(self: *@This(), slot: u8) !*Obj.Upvalue {
+            fn captureUpvalue(self: *@This(), slot: u8, closed: bool) !*Obj.Upvalue {
                 var iter = self.upvalues.iter();
 
                 while (iter.next()) |val| {
@@ -302,7 +302,11 @@ pub const VM = struct {
                 }
                 _ = iter.next();
 
-                const new = try self.vm.objects.emplace(.Upvalue, .{ .val = &self.frame().slots[slot], .slot = slot });
+                const new = try self.vm.objects.emplace(.Upvalue, null, .{
+                    .val = &self.frame().slots[slot],
+                    .slot = slot,
+                    .closed = closed,
+                });
                 try iter.push(new);
                 return new;
             }
@@ -519,8 +523,7 @@ pub const VM = struct {
                             const arity = self.read_byte();
                             const count = self.read_byte();
 
-                            const closure = try self.vm.objects.emplace(.Function, .{
-                                .type = .Closure,
+                            const closure = try self.vm.objects.emplace(.Function, GC.name_of(chunk.cast()), .{
                                 .chunk = chunk,
                                 .arity = arity,
                                 .upvalues = count,
@@ -533,17 +536,39 @@ pub const VM = struct {
                                 const slot = self.read_byte();
                                 const U = Compiler.Upvalue.Type;
                                 upvalue.* = switch (tp) {
-                                    @intFromEnum(U.local) => try self.captureUpvalue(slot),
+                                    @intFromEnum(U.local) => try self.captureUpvalue(slot, false),
+                                    @intFromEnum(U.immediate) => try self.captureUpvalue(slot, true),
                                     @intFromEnum(U.remote) => self.frame().callee.upvalues.get(slot),
+                                    @intFromEnum(U.empty) => null,
                                     else => return InterpreterError.RuntimeError,
                                 };
                             }
                         },
                         @intFromEnum(OP.METHOD) => {
                             const name = self.read_string();
+                            const offset = self.read_byte();
                             const method = try self.pop().obj.cast(.Function);
-                            const class = try self.peek(0).obj.cast(.Class);
+                            const class = try self.peek(offset).obj.cast(.Class);
                             _ = try class.methods.ptr().set(name, method);
+                        },
+                        @intFromEnum(OP.INHERIT) => {
+                            const val = self.peek(0);
+                            if (val.cast_if(Obj.Type.Class)) |super| {
+                                const sub = self.peek(1).obj.cast(.Class) catch unreachable;
+                                try sub.methods.ptr().addAll(super.methods.ptr());
+                            } else {
+                                self.runtimeError("A class can only inherit from another class. Wrong type: {s}", .{val.typeName()});
+                            }
+                        },
+                        @intFromEnum(OP.GET_SUPER) => {
+                            const name = self.read_string();
+                            const super = try self.pop().obj.cast(.Class);
+                            const this = try self.pop().obj.cast(.Instance);
+
+                            self.push(Value.init((switch (try super.method(name)) {
+                                .Static => |sta| sta,
+                                .Unbound => |unb| try unb.bind(&self.vm.objects, this),
+                            }).cast()));
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),

@@ -28,7 +28,7 @@ pub fn concatenate(objects: *GC) Type(Obj.Type.String, Obj.Type.String) {
     const Ret = Type(Obj.Type.String, Obj.Type.String);
     const ret = Ret{ .objects = objects, ._call = struct {
         pub fn concatenate(self: *const Ret, lhs: *Obj, rhs: *Obj) Error!*Obj {
-            return try self.objects.emplace_cast(.String, &.{ (lhs.cast(.String) catch unreachable).slice(), (rhs.cast(.String) catch unreachable).slice() });
+            return try self.objects.emplace_cast(.String, null, &.{ (lhs.cast(.String) catch unreachable).slice(), (rhs.cast(.String) catch unreachable).slice() });
         }
     }.concatenate };
     return ret;

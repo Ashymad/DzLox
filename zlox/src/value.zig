@@ -21,7 +21,12 @@ pub const Value = union(enum) {
             .char => |val| try writer.writeAll(&[_]u8{val}),
             .bool => |val| try writer.writeAll(if (val) "true" else "false"),
             .nil => try writer.writeAll("nil"),
-            .obj => |o| try o.format(writer),
+            .obj => |o| switch (o.type) {
+                inline else => |tp| if (@hasDecl(tp.get(), "format"))
+                    try (o.cast(tp) catch unreachable).format(writer)
+                else
+                    try o.format(writer),
+            },
         }
     }
 

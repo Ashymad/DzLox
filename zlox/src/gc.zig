@@ -5,6 +5,12 @@ const utils = @import("lib::utils.zig");
 
 const Value = @import("value.zig").Value;
 const VM = @import("vm.zig").VM;
+const Packed = @import("lib::packed.zig").Packed;
+
+const DBG_STRESS = false;
+const DBG_LOG = false;
+const DBG_NAME = true;
+const GC_HEAP_GROW_FACTOR = 2;
 
 pub const GC = struct {
     pub const Color = enum(u8) {
@@ -13,7 +19,24 @@ pub const GC = struct {
         None,
     };
 
-    pub const Obj = @import("obj.zig").Obj(.{ .color = Color.White });
+    pub const Name = Packed(?[]const u8);
+
+    pub const Obj = if (DBG_NAME)
+        @import("obj.zig").Obj(packed struct {
+            color: Color = Color.White,
+            name: Name = Name.init(null),
+
+            pub fn format(self: anytype, writer: *std.Io.Writer) !void {
+                if (self.name.ptr()) |nam| {
+                    _ = try writer.write(":");
+                    _ = try writer.write(nam);
+                }
+            }
+        })
+    else
+        @import("obj.zig").Obj(packed struct {
+            color: Color = Color.White,
+        });
 
     const Self = @This();
 
@@ -32,10 +55,6 @@ pub const GC = struct {
             self.@"fn"(self.arg);
         }
     };
-
-    const DBG_STRESS = false;
-    const DBG_LOG = false;
-    const GC_HEAP_GROW_FACTOR = 2;
 
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -210,7 +229,12 @@ pub const GC = struct {
         }
     }
 
-    pub fn emplace(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) (ObjList.Error || tp.get().Error || Obj.String.Pool.Error)!*tp.get() {
+    pub fn emplace(
+        self: *Self,
+        comptime tp: Obj.Type,
+        name: ?[]const u8,
+        arg: tp.get().Arg,
+    ) (ObjList.Error || tp.get().Error || Obj.String.Pool.Error)!*tp.get() {
         if (tp == .String)
             if (self.pool.find(arg)) |obj|
                 return obj;
@@ -228,6 +252,10 @@ pub const GC = struct {
             try self.pool.put(chd);
 
         const obj = chd.cast();
+
+        if (DBG_NAME)
+            obj.fields.name = Name.init(name);
+
         dbg_obj("O", "new", obj, true);
 
         try self.objs.push(0, obj);
@@ -245,12 +273,16 @@ pub const GC = struct {
         }
     }
 
+    pub fn name_of(obj: *Obj) ?[]const u8 {
+        return if (DBG_NAME) obj.fields.name.ptr() else null;
+    }
+
     pub fn exclude(obj: *Obj) void {
         obj.fields.color = .None;
     }
 
-    pub fn emplace_cast(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !*Obj {
-        return (try self.emplace(tp, arg)).cast();
+    pub fn emplace_cast(self: *Self, comptime tp: Obj.Type, name: ?[]const u8, arg: tp.get().Arg) !*Obj {
+        return (try self.emplace(tp, name, arg)).cast();
     }
 
     pub fn deinit(self: *Self) void {

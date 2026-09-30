@@ -55,7 +55,7 @@ fn _disassembleInstruction(ch: *const Obj.Chunk, offset: usize, print_fn: bool) 
         @intFromEnum(OP.NOT) => simpleInstruction(name, offset),
         @intFromEnum(OP.CONSTANT) => try constantInstruction(name, ch, offset, print_fn),
         @intFromEnum(OP.DEFINE_GLOBAL) => try constantInstruction(name, ch, offset, print_fn),
-        @intFromEnum(OP.METHOD) => try constantInstruction(name, ch, offset, print_fn),
+        @intFromEnum(OP.METHOD) => try constantInstruction(name, ch, offset, print_fn) + 1,
         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => try constantInstruction(name, ch, offset, print_fn),
         @intFromEnum(OP.GET_GLOBAL) => try constantInstruction(name, ch, offset, print_fn),
         @intFromEnum(OP.SET_GLOBAL) => try constantInstruction(name, ch, offset, print_fn),
@@ -67,6 +67,7 @@ fn _disassembleInstruction(ch: *const Obj.Chunk, offset: usize, print_fn: bool) 
         @intFromEnum(OP.SET_UPVALUE) => try byteInstruction(name, ch, offset),
         @intFromEnum(OP.GET_PROPERTY) => try byteInstruction(name, ch, offset),
         @intFromEnum(OP.SET_PROPERTY) => try byteInstruction(name, ch, offset),
+        @intFromEnum(OP.GET_SUPER) => try constantInstruction(name, ch, offset, print_fn),
         @intFromEnum(OP.JUMP_IF_FALSE) => try jumpInstruction(name, true, ch, offset),
         @intFromEnum(OP.JUMP_POP) => simpleInstruction(name, offset),
         @intFromEnum(OP.JUMP) => try jumpInstruction(name, true, ch, offset),
@@ -76,6 +77,7 @@ fn _disassembleInstruction(ch: *const Obj.Chunk, offset: usize, print_fn: bool) 
         @intFromEnum(OP.CALL) => try byteInstruction(name, ch, offset),
         @intFromEnum(OP.CLOSURE) => try closureInstruction(name, ch, offset),
         @intFromEnum(OP.CLOSE_UPVALUE) => simpleInstruction(name, offset),
+        @intFromEnum(OP.INHERIT) => simpleInstruction(name, offset),
         else => blk: {
             print("Unknown opcode {d} {s}\n", .{ op, name });
             break :blk offset + 1;

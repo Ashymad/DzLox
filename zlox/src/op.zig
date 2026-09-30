@@ -25,6 +25,7 @@ pub const OP = enum(u8) {
     SET_PROPERTY,
     GET_UPVALUE,
     SET_UPVALUE,
+    GET_SUPER,
     METHOD,
     JUMP_IF_FALSE,
     JUMP,
@@ -35,4 +36,5 @@ pub const OP = enum(u8) {
     CALL,
     CLOSURE,
     CLOSE_UPVALUE,
+    INHERIT,
 };

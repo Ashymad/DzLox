@@ -112,6 +112,21 @@ pub fn pack_t(s: type) type {
     );
 }
 
+pub fn add_field(orig: type, name: []const u8, tp: type, default: ?tp) type {
+    const info = @typeInfo(orig).@"struct";
+    const Attributes = std.lang.Type.Struct.FieldAttributes;
+
+    return @Struct(
+        info.layout,
+        info.backing_integer,
+        info.field_names ++ &.{name},
+        info.field_types ++ &.{tp},
+        info.field_attrs ++ &.{Attributes{
+            .default_value_ptr = default,
+        }},
+    );
+}
+
 pub fn pack(s: anytype) pack_t(@TypeOf(s)) {
     const T = @TypeOf(s);
     const fields = @typeInfo(T).@"struct".field_names;

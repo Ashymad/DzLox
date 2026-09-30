@@ -59,13 +59,14 @@ pub fn Compiler(size: comptime_int) type {
 
         const Class = struct {
             enclosing: ?*Class,
+            hasSuperclass: bool = false,
         };
 
         const Self = @This();
         pub const Stack = size;
 
         pub const Upvalue = struct {
-            pub const Type = enum(u8) { local = 0, remote = 1 };
+            pub const Type = enum(u8) { local = 0, remote = 1, empty = 2, immediate = 3 };
 
             index: u8,
             type: Type,
@@ -78,6 +79,8 @@ pub fn Compiler(size: comptime_int) type {
             depth: ?usize = null,
             con: bool = true,
             captured: bool = false,
+            placeholder: bool = false,
+            immediate: bool = false,
         };
 
         const ParseFn = *const fn (*Self, bool) void;
@@ -101,34 +104,35 @@ pub fn Compiler(size: comptime_int) type {
                 const tok: Token = @enumFromInt(i);
                 v.* = switch (tok) {
                     // zig fmt: off
-                    T.LEFT_PAREN    => R(S.grouping, S.call,    P.CALL ),
-                    T.LEFT_BRACKET  => R(S.listTable,S.index,   P.CALL ),
-                    T.MINUS         => R(S.unary,    S.binary,  P.TERM ),
-                    T.PLUS          => R(null,       S.binary,  P.TERM ),
-                    T.SLASH         => R(null,       S.binary,  P.FACTOR ),
-                    T.STAR          => R(null,       S.binary,  P.FACTOR ),
-                    T.QUESTION      => R(null,       S.ternary, P.TERNARY ),
-                    T.BANG          => R(S.unary,    null,      P.NONE ),
-                    T.BANG_EQUAL    => R(null,       S.binary,  P.EQUALITY ),
-                    T.EQUAL_EQUAL   => R(null,       S.binary,  P.EQUALITY ),
-                    T.GREATER       => R(null,       S.binary,  P.COMPARISON ),
-                    T.GREATER_EQUAL => R(null,       S.binary,  P.COMPARISON ),
-                    T.LESS          => R(null,       S.binary,  P.COMPARISON ),
-                    T.LESS_EQUAL    => R(null,       S.binary,  P.COMPARISON ),
-                    T.IDENTIFIER    => R(S.variable, null,      P.NONE ),
-                    T.STRING        => R(S.string,   null,      P.NONE ),
-                    T.CHAR          => R(S.char,     null,      P.NONE ),
-                    T.NUMBER        => R(S.number,   null,      P.NONE ),
-                    T.AND           => R(null,       S._and,    P.AND ),
-                    T.FALSE         => R(S.literal,  null,      P.NONE ),
-                    T.NIL           => R(S.literal,  null,      P.NONE ),
-                    T.OR            => R(null,       S._or,     P.OR ),
-                    T.TRUE          => R(S.literal,  null,      P.NONE ),
-                    T.FUN           => R(S.funExpression, null,      P.NONE ),
-                    T.CLASS         => R(S.class,    null,      P.NONE ),
-                    T.DOT           => R(null,       S.dot,     P.CALL ),
-                    T.THIS          => R(S.this,     null,      P.NONE ),
-                    else            => R(null,       null,      P.NONE ),
+                    T.LEFT_PAREN    => R(S.grouping,        S.call,    P.CALL ),
+                    T.LEFT_BRACKET  => R(S.listTable,       S.index,   P.CALL ),
+                    T.MINUS         => R(S.unary,           S.binary,  P.TERM ),
+                    T.PLUS          => R(null,              S.binary,  P.TERM ),
+                    T.SLASH         => R(null,              S.binary,  P.FACTOR ),
+                    T.STAR          => R(null,              S.binary,  P.FACTOR ),
+                    T.QUESTION      => R(null,              S.ternary, P.TERNARY ),
+                    T.BANG          => R(S.unary,           null,      P.NONE ),
+                    T.BANG_EQUAL    => R(null,              S.binary,  P.EQUALITY ),
+                    T.EQUAL_EQUAL   => R(null,              S.binary,  P.EQUALITY ),
+                    T.GREATER       => R(null,              S.binary,  P.COMPARISON ),
+                    T.GREATER_EQUAL => R(null,              S.binary,  P.COMPARISON ),
+                    T.LESS          => R(null,              S.binary,  P.COMPARISON ),
+                    T.LESS_EQUAL    => R(null,              S.binary,  P.COMPARISON ),
+                    T.IDENTIFIER    => R(S.variable,        null,      P.NONE ),
+                    T.STRING        => R(S.string,          null,      P.NONE ),
+                    T.CHAR          => R(S.char,            null,      P.NONE ),
+                    T.NUMBER        => R(S.number,          null,      P.NONE ),
+                    T.AND           => R(null,              S._and,    P.AND ),
+                    T.FALSE         => R(S.literal,         null,      P.NONE ),
+                    T.NIL           => R(S.literal,         null,      P.NONE ),
+                    T.OR            => R(null,              S._or,     P.OR ),
+                    T.TRUE          => R(S.literal,         null,      P.NONE ),
+                    T.FUN           => R(S.funExpression,   null,      P.NONE ),
+                    T.CLASS         => R(S.classExpression, null,      P.NONE ),
+                    T.DOT           => R(null,              S.dot,     P.CALL ),
+                    T.THIS          => R(S.this,            null,      P.NONE ),
+                    T.SUPER         => R(S.super,           null,      P.NONE ),
+                    else            => R(null,              null,      P.NONE ),
                     // zig fmt: on
                 };
             }
@@ -185,7 +189,7 @@ pub fn Compiler(size: comptime_int) type {
 
         fn emitReturn(self: *Self) void {
             if (self.initializer)
-                self.emit(OP.GET_LOCAL, 0)
+                self.namedVariable(makeIdentifier("this"), false)
             else if (self.enclosing) |_|
                 self.emitOP(OP.NIL);
 
@@ -267,7 +271,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn string(self: *Self, _: bool) void {
-            self.emitObj(.String, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch return;
+            self.emitObj(.String, null, &.{self.previous.lexeme[1 .. self.previous.lexeme.len - 1]}) catch return;
         }
 
         fn char(self: *Self, _: bool) void {
@@ -308,16 +312,16 @@ pub fn Compiler(size: comptime_int) type {
             return argCount;
         }
 
-        fn makeObj(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !u8 {
-            return self.makeConstant(Value.init(self.objects.emplace_cast(tp, arg) catch |err| {
+        fn makeObj(self: *Self, comptime tp: Obj.Type, name: ?[]const u8, arg: tp.get().Arg) !u8 {
+            return self.makeConstant(Value.init(self.objects.emplace_cast(tp, name, arg) catch |err| {
                 self.lastError = err;
                 self.errorAtPrevious("Unable to allocate obj");
                 return err;
             }));
         }
 
-        fn emitObj(self: *Self, comptime tp: Obj.Type, arg: tp.get().Arg) !void {
-            self.emit(OP.CONSTANT, try self.makeObj(tp, arg));
+        fn emitObj(self: *Self, comptime tp: Obj.Type, name: ?[]const u8, arg: tp.get().Arg) !void {
+            self.emit(OP.CONSTANT, try self.makeObj(tp, name, arg));
         }
 
         fn listTable(self: *Self, _: bool) void {
@@ -350,11 +354,11 @@ pub fn Compiler(size: comptime_int) type {
                 }
             }
             if (isList) {
-                self.chunk.code.ptr().set(offset, self.makeObj(.Native, .{
+                self.chunk.code.ptr().set(offset, self.makeObj(.Native, "L::list", .{
                     .fun = vm_native.list,
                 }) catch return) catch return;
             } else {
-                self.chunk.code.ptr().set(offset, self.makeObj(.Native, .{
+                self.chunk.code.ptr().set(offset, self.makeObj(.Native, "L::table", .{
                     .fun = vm_native.table,
                 }) catch return) catch return;
             }
@@ -377,6 +381,23 @@ pub fn Compiler(size: comptime_int) type {
                 self.variable(false);
             } else {
                 self.errorAtPrevious("Can't use 'this' outside of class.");
+            }
+        }
+
+        fn super(self: *Self, _: bool) void {
+            if (self.currentClass) |cls| {
+                if (cls.hasSuperclass) {
+                    self.consume(Token.DOT, "Expect '.' after 'super'.");
+                    self.consume(Token.IDENTIFIER, "Expect superclass method name.");
+                    const name = self.identifierConstant(self.previous) catch return;
+                    self.namedVariable(makeIdentifier("this"), false);
+                    self.namedVariable(makeIdentifier("super"), false);
+                    self.emit(OP.GET_SUPER, name);
+                } else {
+                    self.errorAtPrevious("Can't use 'super' in a class with no parent.");
+                }
+            } else {
+                self.errorAtPrevious("Can't use 'super' outside of a class.");
             }
         }
 
@@ -407,8 +428,12 @@ pub fn Compiler(size: comptime_int) type {
         fn resolveUpvalue(self: *Self, name: scanner.Token) ?u8 {
             if (self.enclosing) |enclosing| {
                 if (enclosing.resolveLocal(name)) |local| {
-                    enclosing.locals[local].captured = true;
-                    return self.addUpvalue(local, .local) catch null;
+                    const loc = &enclosing.locals[local];
+                    loc.captured = !loc.placeholder and !loc.immediate;
+                    return self.addUpvalue(
+                        local,
+                        if (loc.placeholder) .empty else if (loc.immediate) .immediate else .local,
+                    ) catch null;
                 } else if (enclosing.resolveUpvalue(name)) |upvalue| {
                     return self.addUpvalue(upvalue, .remote) catch null;
                 }
@@ -560,27 +585,60 @@ pub fn Compiler(size: comptime_int) type {
         fn classDeclaration(self: *Self) void {
             const global = self.parseVariable("Expect class name.", true) catch return;
             self.markInitialized();
-            self.class(false);
+            self.class(self.previous.lexeme);
             self.defineVariable(global, true);
         }
 
-        fn class(self: *Self, _: bool) void {
-            const cls = self.objects.emplace_cast(Obj.Type.Class, {}) catch |err| {
+        fn makeIdentifier(name: []const u8) scanner.Token {
+            return .{
+                .type = Token.IDENTIFIER,
+                .lexeme = name,
+                .line = -1,
+                .column = 0,
+            };
+        }
+
+        fn classExpression(self: *Self, _: bool) void {
+            self.class(null);
+        }
+
+        fn class(self: *Self, name: ?[]const u8) void {
+            const cls = self.objects.emplace_cast(Obj.Type.Class, name, {}) catch |err| {
                 self.errorAtPrevious("Couldn't allocate class");
                 self.lastError = err;
                 return;
             };
+
+            self.beginScope();
+
             self.emit(OP.CONSTANT, self.makeConstant(Value.init(cls)));
+            self.addLocal(makeIdentifier("this"), true);
+            self.markInitialized();
+            self.markPlaceholder();
+
+            const subclass = self.match(Token.LESS);
+
+            if (subclass) {
+                self.expression();
+                self.addLocal(makeIdentifier("super"), true);
+                self.markInitialized();
+                self.markImmediate();
+                self.emitOP(OP.INHERIT);
+            }
+
             self.consume(Token.LEFT_BRACE, "Expect '{' before class body");
 
-            var curcls = Class{ .enclosing = self.currentClass };
+            var curcls = Class{ .enclosing = self.currentClass, .hasSuperclass = subclass };
             self.currentClass = &curcls;
+
             while (!self.check(Token.RIGHT_BRACE) and !self.check(Token.EOF)) {
                 self.method();
             }
+
             self.currentClass = self.currentClass.?.enclosing;
 
             self.consume(Token.RIGHT_BRACE, "Expect '}' after class body");
+            self.endScope();
         }
 
         fn method(self: *Self) void {
@@ -588,6 +646,7 @@ pub fn Compiler(size: comptime_int) type {
             const constant = self.identifierConstant(self.previous) catch return;
             self.function(true, self.previous.lexeme);
             self.emit(OP.METHOD, constant);
+            self.emitByte(if (self.currentClass.?.hasSuperclass) 1 else 0);
         }
 
         fn funDeclaration(self: *Self) void {
@@ -598,11 +657,11 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn funExpression(self: *Self, _: bool) void {
-            self.function(false, "<anon>");
+            self.function(false, null);
         }
 
-        fn function(self: *Self, isMethod: bool, name: []const u8) void {
-            const chunk = self.objects.emplace(.Chunk, {}) catch |err| {
+        fn function(self: *Self, isMethod: bool, name: ?[]const u8) void {
+            const chunk = self.objects.emplace(.Chunk, name, {}) catch |err| {
                 self.errorAtPrevious("Couldn't allocate chunk");
                 self.lastError = err;
                 return;
@@ -614,7 +673,7 @@ pub fn Compiler(size: comptime_int) type {
                 return;
             };
 
-            compiler.initializer = isMethod and std.mem.eql(u8, name, "init");
+            compiler.initializer = if (name) |n| isMethod and std.mem.eql(u8, n, "init") else false;
 
             compiler.objects.push_callback(&gc_callback, &compiler) catch @panic("Couln't push callback");
             defer compiler.objects.pop_callback();
@@ -635,25 +694,9 @@ pub fn Compiler(size: comptime_int) type {
             }
             compiler.consume(Token.RIGHT_PAREN, "Expect ')' after parameters");
 
-            var offset: usize = 0;
-
-            if (isMethod) {
-                compiler.locals[0] = .{
-                    .name = scanner.Token{ .type = Token.THIS, .lexeme = "this", .line = -1, .column = 0 },
-                    .depth = compiler.scopeDepth,
-                };
-                compiler.emit(OP.GET_UPVALUE, 0);
-                offset = compiler.chunk.code.ptr().len - 1;
-                compiler.emit(OP.SET_LOCAL, 0);
-                compiler.emitOP(OP.POP);
-            }
-
             compiler.consume(Token.LEFT_BRACE, "Expect '{' before function body");
 
             compiler.block();
-
-            if (isMethod)
-                compiler.chunk.code.ptr().set(offset, compiler.upvaluesCount) catch unreachable;
 
             self.current = compiler.current;
 
@@ -662,8 +705,7 @@ pub fn Compiler(size: comptime_int) type {
             } else {
                 const endchunk = compiler.end() catch return;
                 if (compiler.upvaluesCount == 0) {
-                    const fun = self.objects.emplace(.Function, .{
-                        .type = .Function,
+                    const fun = self.objects.emplace(.Function, name, .{
                         .chunk = endchunk,
                         .arity = arity,
                     }) catch |err| {
@@ -721,7 +763,7 @@ pub fn Compiler(size: comptime_int) type {
         }
 
         fn identifierConstant(self: *Self, tok: scanner.Token) !u8 {
-            return self.makeConstant(Value.init(self.objects.emplace_cast(.String, &.{tok.lexeme}) catch |err| {
+            return self.makeConstant(Value.init(self.objects.emplace_cast(.String, null, &.{tok.lexeme}) catch |err| {
                 self.lastError = err;
                 self.errorAtPrevious("Couldn't allocate identifier");
                 return err;
@@ -762,6 +804,16 @@ pub fn Compiler(size: comptime_int) type {
         fn markInitialized(self: *Self) void {
             if (self.scopeDepth == 0) return;
             self.locals[self.localCount - 1].depth = self.scopeDepth;
+        }
+
+        fn markPlaceholder(self: *Self) void {
+            if (self.scopeDepth == 0) return;
+            self.locals[self.localCount - 1].placeholder = true;
+        }
+
+        fn markImmediate(self: *Self) void {
+            if (self.scopeDepth == 0) return;
+            self.locals[self.localCount - 1].immediate = true;
         }
 
         fn defineVariable(self: *Self, global: u8, con: bool) void {
@@ -833,7 +885,7 @@ pub fn Compiler(size: comptime_int) type {
 
             self.consume(Token.LEFT_PAREN, "Expect '(' after 'switch'.");
 
-            self.emitObj(.Native, Obj.Native.Arg{
+            self.emitObj(.Native, "L::table", Obj.Native.Arg{
                 .fun = vm_native.table,
             }) catch return;
 
@@ -1026,14 +1078,17 @@ pub fn Compiler(size: comptime_int) type {
             self.scopeDepth -= 1;
 
             while (self.localCount > 0) {
-                if (self.locals[self.localCount - 1].depth) |depth| {
+                const local = self.locals[self.localCount - 1];
+
+                if (local.depth) |depth| {
                     if (depth <= self.scopeDepth) break;
                 } else {
-                    self.errorAt(self.locals[self.localCount - 1].name, "Unitialized variable at scope end");
+                    self.errorAt(local.name, "Unitialized variable at scope end");
                 }
-                if (self.locals[self.localCount - 1].captured) {
+
+                if (local.captured) {
                     self.emitOP(OP.CLOSE_UPVALUE);
-                } else {
+                } else if (!local.placeholder) {
                     self.emitOP(OP.POP);
                 }
                 self.localCount -= 1;
@@ -1104,7 +1159,7 @@ pub fn Compiler(size: comptime_int) type {
 
         pub fn compile(source: []const u8, objects: *GC) CompilerError!*Obj.Chunk {
             var scan = try scanner.Scanner.init(source);
-            const chunk = try objects.emplace(.Chunk, {});
+            const chunk = try objects.emplace(.Chunk, "toplevel", {});
             var self = try Self.init(&scan, objects, chunk);
 
             try objects.push_callback(&gc_callback, &self);

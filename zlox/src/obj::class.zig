@@ -7,6 +7,7 @@ const hash = @import("hash.zig");
 const Packed = @import("lib::packed.zig").Packed;
 const Obj = @import("obj.zig").Obj;
 const Value = @import("value.zig").Value;
+const GC = @import("gc.zig").GC;
 
 pub fn Class(fields: anytype) type {
     const Super = Obj(fields);
@@ -35,12 +36,42 @@ pub fn Class(fields: anytype) type {
             return @ptrCast(self);
         }
 
-        pub fn format(_: *const Self, writer: *std.Io.Writer) !void {
-            _ = try writer.write("<Class>");
-        }
+        pub fn method(self: *Self, name: *Super.String) !union(enum) {
+            Static: *Super.Function,
+            Unbound: struct {
+                this: usize,
+                fun: *Super.Function,
 
-        pub fn eql(_: *const Self, _: *const Self) bool {
-            return false;
+                pub fn bind(sel: *const @This(), gc: *GC, this: *Super.Instance) !*Super.Function {
+                    var fun = try gc.emplace(.Function, GC.name_of(sel.fun.cast()), .{
+                        .chunk = sel.fun.chunk.ptr(),
+                        .arity = sel.fun.arity,
+                        .upvalues = @intCast(sel.fun.upvalues.len()),
+                    });
+
+                    fun.upvalues.set(sel.fun.upvalues.ptr());
+
+                    var thi = Value.init(this.cast());
+
+                    fun.upvalues.ptr()[sel.this] = try gc.emplace(.Upvalue, null, .{
+                        .val = &thi,
+                        .slot = 0,
+                        .closed = true,
+                    });
+
+                    return fun;
+                }
+            },
+        } {
+            const met = try self.methods.ptr().get(name);
+
+            for (met.upvalues.ptr(), 0..) |upvalue, idx| {
+                if (upvalue == null) {
+                    return .{ .Unbound = .{ .fun = met, .this = idx } };
+                }
+            }
+
+            return .{ .Static = met };
         }
 
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {

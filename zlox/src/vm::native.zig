@@ -23,7 +23,7 @@ pub fn put(_: *GC, args: []const Value) Error!Value {
 }
 
 pub fn table(gc: *GC, args: []const Value) Error!Value {
-    var tbl = gc.emplace(.Table, {}) catch return Error.Native;
+    var tbl = gc.emplace(.Table, null, {}) catch return Error.Native;
     if (args.len % 2 != 0) return Error.Native;
     var i: usize = 0;
     while (i < args.len) : (i += 2) {
@@ -33,7 +33,7 @@ pub fn table(gc: *GC, args: []const Value) Error!Value {
 }
 
 pub fn list(gc: *GC, args: []const Value) Error!Value {
-    var lis = gc.emplace(.List, {}) catch return Error.Native;
+    var lis = gc.emplace(.List, null, {}) catch return Error.Native;
     for (args) |arg| {
         lis.list.ptr().push(-1, arg) catch return Error.Native;
     }
@@ -41,7 +41,7 @@ pub fn list(gc: *GC, args: []const Value) Error!Value {
 }
 
 pub fn typeof(gc: *GC, args: []const Value) Error!Value {
-    return Value.init(gc.emplace_cast(.String, &.{args[0].typeName()}) catch return Error.Native);
+    return Value.init(gc.emplace_cast(.String, null, &.{args[0].typeName()}) catch return Error.Native);
 }
 
 pub fn rungc(gc: *GC, _: []const Value) Error!Value {

@@ -42,11 +42,7 @@ pub fn Chunk(fields: anytype) type {
         }
 
         pub fn format(self: *const Self, writer: *std.Io.Writer) !void {
-            _ = try writer.print("<chunk at {d}>", .{self.lines.ptr().get(0) orelse 0});
-        }
-
-        pub fn eql(_: *const Self, _: *const Self) bool {
-            return false;
+            _ = try writer.print("{d}", .{self.lines.ptr().get(0) orelse 0});
         }
 
         pub fn free(self: *const Self, allocator: std.mem.Allocator) void {

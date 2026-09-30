@@ -125,13 +125,16 @@ pub fn Slice(Type: type) type {
         }
 
         pub fn init(arg: Type) Self {
-            return Self{
-                ._ptr = Ptr.init(arg.ptr),
-                ._len = if (utils.optional(arg)) |val|
-                    val.len
-                else
-                    0,
-            };
+            return if (Ptr.optional)
+                Self{
+                    ._ptr = Ptr.init(if (arg) |val| val.ptr else null),
+                    ._len = if (arg) |val| val.len else 0,
+                }
+            else
+                Self{
+                    ._ptr = Ptr.init(arg.ptr),
+                    ._len = arg.len,
+                };
         }
 
         pub fn ptr(self: Self) Type {
@@ -154,7 +157,7 @@ pub fn Slice(Type: type) type {
             return self._len;
         }
 
-        pub fn set(self: Self, val: Ptr.Val) if (Ptr.optional) Error.NullPointer!void else void {
+        pub fn set(self: Self, val: []Ptr.Val) if (Ptr.optional) Error.NullPointer!void else void {
             if (utils.optional(self.ptr())) |pointer|
                 @memcpy(pointer, val)
             else if (Ptr.optional)

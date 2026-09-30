@@ -37,38 +37,15 @@ pub fn Instance(fields: anytype) type {
         }
 
         pub fn method(self: *Self, gc: *GC, name: *Super.String) !*Super.Function {
-            return self.bound.ptr().get(name) catch blk: {
-                const met = try self.cls.ptr().methods.ptr().get(name);
-                const fun = try gc.emplace(.Function, .{
-                    .type = .Method,
-                    .chunk = met.chunk.ptr(),
-                    .arity = met.arity,
-                    .upvalues = @intCast(met.upvalues.len() + 1),
-                });
-
-                var val = Value.init(self.cast());
-                const len = fun.upvalues.len();
-                if (len > 1)
-                    @memcpy(fun.upvalues.ptr()[0 .. len - 1], met.upvalues.ptr());
-
-                fun.upvalues.ptr()[len - 1] = try gc.emplace(.Upvalue, .{
-                    .val = &val,
-                    .slot = 0,
-                    .closed = true,
-                });
-
-                _ = try self.bound.ptr().set(name, fun);
-
-                break :blk fun;
-            };
+            return self.bound.ptr().get(name) catch
+                switch (try self.cls.ptr().method(name)) {
+                    .Static => |sta| sta,
+                    .Unbound => |unb| try self.bound.ptr().retset(name, try unb.bind(gc, self)),
+                };
         }
 
         pub fn cast(self: anytype) utils.copy_const(@TypeOf(self), *Super) {
             return @ptrCast(self);
-        }
-
-        pub fn format(_: *const Self, writer: *std.Io.Writer) !void {
-            _ = try writer.write("<Instance>");
         }
 
         pub fn eql(_: *const Self, _: *const Self) bool {

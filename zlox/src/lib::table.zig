@@ -86,7 +86,7 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
         pub fn addAll(self: *Self, other: *const Self) Error!void {
             for (other.entries) |entry| {
                 switch (entry) {
-                    .some => |some| self.set(some.key, some.value),
+                    .some => |some| _ = try self.set(some.key, some.value),
                     else => {},
                 }
             }
@@ -160,6 +160,12 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             return self.set_(find(self.entries, key), key, val);
         }
 
+        pub fn retset(self: *Self, key: K, val: V) Error!V {
+            try self.checkCapacity();
+            _ = self.set_(find(self.entries, key), key, val);
+            return val;
+        }
+
         pub fn replace(self: *Self, key: K, val: V) Error!void {
             if (self.entries.len == 0)
                 return Error.KeyError;
@@ -189,6 +195,16 @@ pub fn Table(K: type, V: type, hash_fn: fn (K) u32, cmp_fn: fn (K, K) bool) type
             return switch (find(self.entries, key).*) {
                 .some => |some| some.value,
                 else => Error.KeyError,
+            };
+        }
+
+        pub fn gorset(self: *Self, key: K, val: V) Error!V {
+            return self.get(key) catch |err| switch (err) {
+                Error.KeyError => blk: {
+                    _ = try self.set(key, val);
+                    break :blk val;
+                },
+                else => err,
             };
         }
 
