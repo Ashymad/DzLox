@@ -154,3 +154,13 @@ pub fn enumFromStruct(str: type, backing: type) type {
         &field_values,
     );
 }
+
+pub fn typepun(Ret: type, val: anytype) Ret {
+    if (@alignOf(@TypeOf(val)) < @alignOf(Ret)) {
+        var ret: Ret = undefined;
+        @as(*@TypeOf(val), @ptrCast(&ret)).* = val;
+        return ret;
+    } else {
+        return @as(*const Ret, @ptrCast(&val)).*;
+    }
+}

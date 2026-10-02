@@ -1,18 +1,75 @@
 const std = @import("std");
 const utils = @import("lib::utils.zig");
 
-pub fn pun(Ret: type, val: anytype) Ret {
-    if (@alignOf(@TypeOf(val)) < @alignOf(Ret)) {
-        var ret: Ret = undefined;
-        @as(*@TypeOf(val), @ptrCast(&ret)).* = val;
-        return ret;
-    } else {
-        return @as(*const Ret, @ptrCast(&val)).*;
-    }
-}
+const Flag = struct {
+    flag: u64,
+    mask: u64,
+    true: bool = true,
+    shift: u6 = 0,
 
-fn expand(tag: u64) u64 {
-    return ((0b100 & tag) << 61) | ((0b11 & tag) << 48);
+    pub fn check(self: *const @This(), val: u64) bool {
+        return self.true == ((val & self.mask) == self.flag);
+    }
+
+    pub fn decode(self: *const @This(), val: u64) u64 {
+        return if (self.true) (val & ~self.mask) << self.shift else val;
+    }
+
+    pub fn encode(self: *const @This(), val: u64) u64 {
+        return if (self.true) ((val >> self.shift) & ~self.mask) | self.flag else val;
+    }
+};
+
+pub fn Packer(comptime MAX: u6) type {
+    const MAXU64: u64 = std.math.maxInt(u64);
+    const MASK: u64 = ~(MAXU64 << MAX);
+
+    return struct {
+        matrix: [MAX]?u64,
+
+        pub fn init() @This() {
+            return .{ .matrix = @splat(0) };
+        }
+
+        fn mask(idx: u6) u64 {
+            return MASK & (MAXU64 << idx);
+        }
+
+        fn inc(val: u64, idx: u6) ?u64 {
+            return if ((val & mask(idx)) == mask(idx))
+                null
+            else
+                val + (@as(u64, 1) << idx);
+        }
+
+        pub fn next(self: *@This(), idx: u6) ?u64 {
+            if (self.matrix[idx]) |ret| {
+                var i: u6 = idx;
+                while (i < MAX) : (i += 1) {
+                    if (self.matrix[i]) |val| {
+                        if (val == (ret & mask(i)))
+                            self.matrix[i] = inc(val, i)
+                        else
+                            break;
+                    } else break;
+                }
+
+                i = idx;
+                while (i > 0) {
+                    i -= 1;
+                    if (self.matrix[i]) |val| {
+                        if (val == (ret & mask(i)))
+                            self.matrix[i] = self.matrix[idx]
+                        else
+                            break;
+                    } else @panic("The Matrix has been breached!");
+                }
+
+                return ret;
+            }
+            return null;
+        }
+    };
 }
 
 pub fn NaNBox(comptime fields: anytype) type {
@@ -21,117 +78,86 @@ pub fn NaNBox(comptime fields: anytype) type {
     if (!utils.is_type(Fields, "struct"))
         @compileError("The fields have to be a struct of types");
 
-    const info = @typeInfo(Fields).@"struct";
-    const enum_f64 = 0xcafe;
+    const flags = blk: {
+        const info = @typeInfo(Fields).@"struct";
 
-    const enums, const HAS_PTR = blk: {
-        var enums: [info.field_names.len]u64 = undefined;
-        var floated = false;
+        var flags: [info.field_names.len]Flag = undefined;
 
-        var e_val: u64 = 0;
-        var e_ptr: u64 = 0;
+        var float = false;
 
-        inline for (info.field_names, info.field_types, &enums) |nam, typ, *enm| {
-            if (typ != type)
-                @compileError("The fields have to be types, but field " ++ nam ++ " is " ++ @typeName(typ));
+        const QNAN: u64 = 0x7ffc000000000000;
+        const SIGN: u64 = 0x8000000000000000;
 
-            const field = @field(fields, nam);
-            const bitsz = @bitSizeOf(field);
+        const Pack = Packer(51);
+        var packer = Pack.init();
+
+        inline for (info.field_names, info.field_types, &flags) |name, ftype, *flag| {
+            if (ftype != type)
+                @compileError("The fields have to be types, but field " ++ name ++ " is " ++ @typeName(ftype));
+
+            const field = @field(fields, name);
+            const is_ptr = utils.is_type(field, "pointer");
 
             if (field == f64) {
-                if (floated)
+                if (float)
                     @compileError("There can only be one f64 field");
-                enm.* = enum_f64;
-                floated = true;
-            } else if (utils.is_type(field, "pointer")) {
-                if (e_ptr == 0 and e_val == 8)
-                    @compileError("This NaNBox already has 8 non-pointer types");
-                if (e_ptr == 8)
-                    @compileError("This NaNBox already has 8 pointer types");
-                enm.* = expand(0b111) | e_ptr;
-                e_ptr += 1;
-            } else if (bitsz < 48) {
-                if (e_val == 8)
-                    @compileError("This NaNBox already has 8 non-pointer types");
-                if (e_ptr > 0 and e_val == 7)
-                    @compileError("This NaNBox already has 7 non-pointer types and at least 1 pointer type");
-                enm.* = expand(e_val);
-                e_val += 1;
+
+                flag.* = .{ .flag = QNAN, .mask = QNAN, .true = false };
+                float = true;
+            } else if (is_ptr or @bitSizeOf(field) < 51) {
+                const bitsz: u6 = if (is_ptr) 45 else @bitSizeOf(field);
+
+                if (packer.next(bitsz)) |pack| {
+                    flag.* = Flag{
+                        .flag = (SIGN & (pack << 13)) | QNAN | pack,
+                        .mask = SIGN | QNAN | Pack.mask(bitsz),
+                        .shift = if (is_ptr) 3 else 0,
+                    };
+                } else {
+                    @compileError("Too many fields to fit");
+                }
             } else {
-                @compileError("The field has to fit in 48bits but field " ++ nam ++ " is " ++ @typeName(field));
+                @compileError("The field " ++ name ++ " has more than 50 bits");
             }
         }
 
-        if (!floated)
-            @compileError("At least one f64 is required");
+        if (!float)
+            @compileError("At least one f64 field is required");
 
-        break :blk .{ enums, e_ptr > 0 };
+        break :blk flags;
     };
 
     return struct {
         const Self = @This();
 
-        const QNAN: u64 = 0x7ffc000000000000;
-        const TAG: u64 = 0x8003000000000000;
-        const PTR_TAG: u64 = 0b111;
-        const VALUE: u64 = ~(QNAN | TAG);
-        const PTR_VALUE: u64 = ~(QNAN | TAG | PTR_TAG);
-
-        pub const Type = @Enum(
-            u64,
-            std.lang.Type.Enum.Mode.exhaustive,
-            info.field_names,
-            &enums,
-        );
-
+        pub const Type = utils.enumFromStruct(Fields, usize);
         pub const Error = error{WrongTag};
 
         value: u64,
 
-        fn from(comptime tag: Type) type {
+        pub fn flag(comptime tag: Type) Flag {
+            return flags[@backingInt(tag)];
+        }
+
+        pub fn typeof(comptime tag: Type) type {
             return @field(fields, @tagName(tag));
         }
 
-        fn unmask(m: u64) u64 {
-            const ret = (m & 0x8000000000000000) | (m & 0x3000000000000);
-            return if (HAS_PTR and ret == TAG) ret | (m & PTR_TAG) else ret;
-        }
-
-        pub fn of(comptime tag: Type, val: from(tag)) Self {
+        pub fn of(comptime tag: Type, val: typeof(tag)) Self {
             return Self{
-                .value = if (from(tag) == f64)
-                    pun(u64, val)
-                else
-                    QNAN | @backingInt(tag) | (pun(u64, val) & VALUE),
+                .value = flag(tag).encode(utils.typepun(u64, val)),
             };
         }
 
-        pub fn to(self: *const Self, comptime tag: Type) !from(tag) {
-            std.debug.print("Msk {b:064} {s}\n", .{ @backingInt(tag), @tagName(tag) });
-            std.debug.print("U64 {b:064}\nTag {b:064}\nVal {b:064}\n", .{ self.value, unmask(self.value), self.value & VALUE });
-
-            return if (self.is() == tag)
-                self.as(from(tag))
+        pub fn to(self: *const Self, comptime tag: Type) !typeof(tag) {
+            return if (self.is(tag))
+                utils.typepun(typeof(tag), flag(tag).decode(self.value))
             else
                 Error.WrongTag;
         }
 
-        pub fn is(self: *const Self) Type {
-            return if ((self.value & QNAN) != QNAN)
-                @fromBackingInt(enum_f64)
-            else
-                @fromBackingInt(unmask(self.value));
-        }
-
-        fn as(self: *const Self, typ: type) typ {
-            return if (typ == f64)
-                pun(f64, self.value)
-            else if (typ == void)
-                @as(void, {})
-            else if (utils.is_type(typ, "pointer"))
-                pun(typ, self.value & PTR_VALUE)
-            else
-                pun(typ, self.value & VALUE);
+        pub fn is(self: *const Self, comptime tag: Type) bool {
+            return flag(tag).check(self.value);
         }
     };
 }
