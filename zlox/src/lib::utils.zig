@@ -155,9 +155,19 @@ pub fn enumFromStruct(str: type, backing: type) type {
     );
 }
 
+pub fn zero(ptr: anytype) void {
+    @memset(@as([*]u8, @ptrCast(ptr))[0..@sizeOf(@TypeOf(ptr))], 0);
+}
+
+pub fn zeroed(typ: type) typ {
+    var ret: typ = undefined;
+    zero(&ret);
+    return ret;
+}
+
 pub fn typepun(Ret: type, val: anytype) Ret {
     if (@alignOf(@TypeOf(val)) < @alignOf(Ret)) {
-        var ret: Ret = undefined;
+        var ret = zeroed(Ret);
         @as(*@TypeOf(val), @ptrCast(&ret)).* = val;
         return ret;
     } else {
