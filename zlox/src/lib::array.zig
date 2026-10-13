@@ -1,4 +1,5 @@
 const std = @import("std");
+const iterator = @import("lib::iterator.zig");
 
 pub fn Array(comptime T: type) type {
     return struct {
@@ -9,22 +10,6 @@ pub fn Array(comptime T: type) type {
         data: []T,
         allocator: std.mem.Allocator,
 
-        pub const Iterator = struct {
-            cur: ?[*]T = null,
-            end: ?[*]T = null,
-
-            pub fn next(self: *Iterator) ?*const T {
-                if (self.cur) |cur| {
-                    self.cur = if (cur == self.end)
-                        null
-                    else
-                        cur + 1;
-                    return cur[0];
-                }
-                return null;
-            }
-        };
-
         pub fn init(allocator: std.mem.Allocator) !Self {
             return Self{
                 .len = 0,
@@ -33,11 +18,8 @@ pub fn Array(comptime T: type) type {
             };
         }
 
-        pub fn iter(self: *Self) Iterator {
-            return if (self.len == 0) Iterator{} else Iterator{
-                .cur = &self.data[0],
-                .end = &self.data[self.len - 1],
-            };
+        pub fn iter(self: *Self) iterator.Slice(@TypeOf(Self.data)) {
+            return iterator.slice(self.data[0..self.len]);
         }
 
         pub fn add(self: *Self, val: T) !void {

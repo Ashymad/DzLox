@@ -1,5 +1,6 @@
 const std = @import("std");
 const utils = @import("lib::utils.zig");
+const iterator = @import("lib::iterator.zig");
 
 const Flag = struct {
     flag: u64,
@@ -44,29 +45,33 @@ pub fn Packer(comptime MAX: u6) type {
 
         pub fn next(self: *@This(), idx: u6) ?u64 {
             if (self.matrix[idx]) |ret| {
-                var i: u6 = idx;
-                while (i < MAX) : (i += 1) {
-                    if (self.matrix[i]) |val| {
-                        if (val == (ret & mask(i)))
-                            self.matrix[i] = inc(val, i)
-                        else
-                            break;
-                    } else break;
-                }
+                const eq = utils.opteq;
 
-                i = idx;
-                while (i > 0) {
-                    i -= 1;
-                    if (self.matrix[i]) |val| {
-                        if (val == (ret & mask(i)))
-                            self.matrix[i] = self.matrix[idx]
-                        else
-                            break;
-                    } else @panic("The Matrix has been breached!");
+                var iter = iterator.zip_longest(
+                    iterator.range(idx, MAX),
+                    iterator.range(@as(u6, 0), idx).reverse(),
+                );
+
+                while (iter.next()) |el| {
+                    if (el.lhs) |i| {
+                        if (eq(self.matrix[i], ret & mask(i))) |val| {
+                            self.matrix[i] = inc(val, i);
+                        } else {
+                            iter.lhs.finish();
+                        }
+                    }
+                    if (el.rhs) |i| {
+                        if (eq(self.matrix[i], ret & mask(i))) |_| {
+                            self.matrix[i] = self.matrix[idx];
+                        } else {
+                            iter.rhs.finish();
+                        }
+                    }
                 }
 
                 return ret;
             }
+
             return null;
         }
     };

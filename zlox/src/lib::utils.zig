@@ -73,8 +73,12 @@ pub fn tagFromType(T: type, U: type) std.meta.Tag(T) {
     @compileError("No matching tag for type " ++ @typeName(U) ++ " in Union " ++ @typeName(T));
 }
 
+pub fn fn_return(comptime fun: anytype) ?type {
+    return @typeInfo(@TypeOf(fun)).@"fn".return_type;
+}
+
 pub fn fn_error(comptime fun: anytype) ?type {
-    const return_type = @typeInfo(@TypeOf(fun)).@"fn".return_type.?;
+    const return_type = fn_return(fun).?;
 
     return if (is_type(return_type, "error_union")) @typeInfo(return_type).error_union.error_set else null;
 }
@@ -153,6 +157,16 @@ pub fn enumFromStruct(str: type, backing: type) type {
         field_names,
         &field_values,
     );
+}
+
+pub fn opteq(lhs: anytype, rhs: @typeInfo(@TypeOf(lhs)).optional.child) @TypeOf(lhs) {
+    return if (lhs) |val|
+        if (val == rhs)
+            val
+        else
+            null
+    else
+        null;
 }
 
 pub fn zero(ptr: anytype) void {
