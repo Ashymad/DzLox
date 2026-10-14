@@ -34,32 +34,32 @@ pub fn concatenate(objects: *GC) Type(Obj.Type.String, Obj.Type.String) {
     return ret;
 }
 
-pub const add = Type(Value.number, Value.number){ .call = struct {
+pub const add = Type(.number, .number){ .call = struct {
     pub inline fn add(a: Number, b: Number) Error!Number {
         return a + b;
     }
 }.add };
-pub const mul = Type(Value.number, Value.number){ .call = struct {
+pub const mul = Type(.number, .number){ .call = struct {
     pub inline fn mul(a: Number, b: Number) Error!Number {
         return a * b;
     }
 }.mul };
-pub const sub = Type(Value.number, Value.number){ .call = struct {
+pub const sub = Type(.number, .number){ .call = struct {
     pub inline fn sub(a: Number, b: Number) Error!Number {
         return a - b;
     }
 }.sub };
-pub const div = Type(Value.number, Value.number){ .call = struct {
+pub const div = Type(.number, .number){ .call = struct {
     pub inline fn div(a: Number, b: Number) Error!Number {
         return a / b;
     }
 }.div };
-pub const less = Type(Value.number, Value.bool){ .call = struct {
+pub const less = Type(.number, .bool){ .call = struct {
     pub inline fn less(a: Number, b: Number) Error!Bool {
         return a < b;
     }
 }.less };
-pub const more = Type(Value.number, Value.bool){ .call = struct {
+pub const more = Type(.number, .bool){ .call = struct {
     pub inline fn more(a: Number, b: Number) Error!Bool {
         return a > b;
     }

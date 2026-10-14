@@ -11,7 +11,7 @@ fn is(comptime thing: anytype) ?@TypeOf(thing) {
 fn errorout(Type: type, Mod: type, comptime field: []const u8) if (has_fn(Mod, field)) @TypeOf(@field(Mod, field)) else fn (Type) noreturn {
     return if (has_fn(Mod, field)) @field(Mod, field) else struct {
         pub fn fun(_: Type) noreturn {
-            @compileError("This iterator doesn't support the " ++ field ++ " method");
+            @compileError("This iterator doesn't support this method");
         }
     }.fun;
 }

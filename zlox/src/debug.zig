@@ -126,7 +126,7 @@ fn closureInstruction(name: []const u8, ch: *const Obj.Chunk, offset: usize) Err
     off += 3;
 
     const constval = ch.constants.ptr().get(constant).?;
-    const chunk = try constval.obj.cast(.Chunk);
+    const chunk = try constval.get(.obj).cast(.Chunk);
 
     print("{s:<32} {d:4} {d}\n", .{ name, arity, count });
     for (0..count) |_| {

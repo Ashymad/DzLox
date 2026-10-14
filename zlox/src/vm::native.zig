@@ -50,7 +50,7 @@ pub fn rungc(gc: *GC, _: []const Value) Error!Value {
 }
 
 pub fn len(_: *GC, val: []const Value) Error!Value {
-    if (val[0].cast_if(Value.obj)) |obj| {
+    if (val[0].cast_if(.obj)) |obj| {
         const ret = switch (obj.type) {
             .String => (obj.cast(.String) catch unreachable).len,
             .Table => (obj.cast(.Table) catch unreachable).table.ptr().count,

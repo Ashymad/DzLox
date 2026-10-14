@@ -58,27 +58,27 @@ pub fn List(fields: anytype) type {
 
         pub fn delete(self: *Self, index: Value) void {
             var lis = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(lis.len()))) {
+            if (!index.is(.number) or index.get(.number) >= @as(Value.tagType(.number), @floatFromInt(lis.len()))) {
                 return;
             }
-            _ = lis.pop(@as(isize, @intFromFloat(index.number))) catch return;
+            _ = lis.pop(@as(isize, @intFromFloat(index.get(.number)))) catch return;
         }
 
         pub fn get(self: *const Self, index: Value) Error!Value {
             var lis = self.list.ptr();
-            if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(lis.len()))) {
+            if (!index.is(.number) or index.get(.number) >= @as(Value.tagType(.number), @floatFromInt(lis.len()))) {
                 return Error.InvalidArgument;
             }
-            return lis.get(@intFromFloat(index.number));
+            return lis.get(@intFromFloat(index.get(.number)));
         }
 
         pub fn set(self: *Self, index: Value, val: Value) Error!void {
             var lis = self.list.ptr();
-            if (!index.is(Value.number)) {
+            if (!index.is(.number)) {
                 return Error.InvalidArgument;
             }
-            _ = lis.set(@intFromFloat(index.number), val) catch
-                try lis.push(@as(isize, @intFromFloat(index.number)), val);
+            _ = lis.set(@intFromFloat(index.get(.number)), val) catch
+                try lis.push(@as(isize, @intFromFloat(index.get(.number))), val);
         }
     };
 }

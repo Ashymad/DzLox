@@ -13,7 +13,7 @@ const GC = @import("gc.zig").GC;
 const Obj = GC.Obj;
 const Chunk = Obj.Chunk;
 
-pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || Value.ParseNumberError || error{ UnexpectedToken, NotAnExpression };
+pub const CompilerError = Obj.Error || scanner.ScannerError || Chunk.Error || std.fmt.ParseFloatError || error{ UnexpectedToken, NotAnExpression };
 
 const Precedence = enum {
     NONE,

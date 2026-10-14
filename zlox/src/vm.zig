@@ -220,7 +220,7 @@ pub const VM = struct {
             }
 
             fn read_string(self: *@This()) *Obj.String {
-                return self.read_constant().obj.cast(.String) catch unreachable;
+                return self.read_constant().cast_if(Obj.Type.String).?;
             }
 
             fn push(self: *@This(), val: Value) void {
@@ -374,17 +374,17 @@ pub const VM = struct {
                         @intFromEnum(OP.POP) => _ = self.pop(),
                         @intFromEnum(OP.CONSTANT) => self.push(self.read_constant()),
                         @intFromEnum(OP.NEGATE) => {
-                            if (!self.peek(0).is(Value.number)) {
+                            if (!self.peek(0).is(.number)) {
                                 self.runtimeError("Operand must be a number.", .{});
                                 return InterpreterError.RuntimeError;
                             }
-                            self.push(Value.init(-self.pop().number));
+                            self.push(Value.init(-self.pop().get(.number)));
                         },
                         @intFromEnum(OP.ADD) => {
                             if (self.peek(0).is(Obj.Type.String)) {
                                 try self.binary_op(Obj.Type.String, Obj.Type.String, callbacks.concatenate(&self.vm.objects));
                             } else {
-                                try self.binary_op(Value.number, Value.number, callbacks.add);
+                                try self.binary_op(.number, .number, callbacks.add);
                             }
                         },
                         @intFromEnum(OP.JUMP_IF_FALSE) => {
@@ -397,7 +397,7 @@ pub const VM = struct {
                             self.ip_add(self.read_short());
                         },
                         @intFromEnum(OP.JUMP_POP) => {
-                            self.ip_add(@intFromFloat(self.pop().number));
+                            self.ip_add(@intFromFloat(self.pop().get(.number)));
                         },
                         @intFromEnum(OP.LOOP) => {
                             self.ip_sub(self.read_short());
@@ -473,7 +473,7 @@ pub const VM = struct {
                             const col = self.pop();
                             var pushed = false;
 
-                            if (col.cast_if(Value.obj)) |obj| {
+                            if (col.cast_if(.obj)) |obj| {
                                 switch (obj.type) {
                                     inline .Table, .String, .List => |tp| {
                                         self.push((obj.cast(tp) catch unreachable).get(key) catch Value.init({}));
@@ -494,11 +494,11 @@ pub const VM = struct {
                             const col = self.pop();
                             var pushed = false;
 
-                            if (col.cast_if(Value.obj)) |obj| {
+                            if (col.cast_if(.obj)) |obj| {
                                 switch (obj.type) {
                                     inline .Table, .List => |tp| {
                                         var m = obj.cast(tp) catch unreachable;
-                                        if (val.is(Value.nil)) {
+                                        if (val.is(.nil)) {
                                             m.delete(key);
                                         } else {
                                             _ = try m.set(key, val);
@@ -519,7 +519,7 @@ pub const VM = struct {
                             try self.callValue(self.peek(argCount), argCount);
                         },
                         @intFromEnum(OP.CLOSURE) => {
-                            const chunk = try self.read_constant().obj.cast(.Chunk);
+                            const chunk = self.read_constant().cast_if(Obj.Type.Chunk).?;
                             const arity = self.read_byte();
                             const count = self.read_byte();
 
@@ -547,14 +547,14 @@ pub const VM = struct {
                         @intFromEnum(OP.METHOD) => {
                             const name = self.read_string();
                             const offset = self.read_byte();
-                            const method = try self.pop().obj.cast(.Function);
-                            const class = try self.peek(offset).obj.cast(.Class);
+                            const method = self.pop().cast_if(Obj.Type.Function).?;
+                            const class = self.peek(offset).cast_if(Obj.Type.Class).?;
                             _ = try class.methods.ptr().set(name, method);
                         },
                         @intFromEnum(OP.INHERIT) => {
                             const val = self.peek(0);
                             if (val.cast_if(Obj.Type.Class)) |super| {
-                                const sub = self.peek(1).obj.cast(.Class) catch unreachable;
+                                const sub = self.peek(1).cast_if(Obj.Type.Class).?;
                                 try sub.methods.ptr().addAll(super.methods.ptr());
                             } else {
                                 self.runtimeError("A class can only inherit from another class. Wrong type: {s}", .{val.typeName()});
@@ -562,8 +562,8 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.GET_SUPER) => {
                             const name = self.read_string();
-                            const super = try self.pop().obj.cast(.Class);
-                            const this = try self.pop().obj.cast(.Instance);
+                            const super = self.pop().cast_if(Obj.Type.Class).?;
+                            const this = self.pop().cast_if(Obj.Type.Instance).?;
 
                             self.push(Value.init((switch (try super.method(name)) {
                                 .Static => |sta| sta,
@@ -572,14 +572,14 @@ pub const VM = struct {
                         },
                         @intFromEnum(OP.DEFINE_GLOBAL) => _ = try self.vm.globals.set(self.read_string(), Global.make_var(self.pop())),
                         @intFromEnum(OP.DEFINE_GLOBAL_CONSTANT) => _ = try self.vm.globals.set(self.read_string(), Global.make_con(self.pop())),
-                        @intFromEnum(OP.SUBTRACT) => try self.binary_op(Value.number, Value.number, callbacks.sub),
-                        @intFromEnum(OP.MULTIPLY) => try self.binary_op(Value.number, Value.number, callbacks.mul),
-                        @intFromEnum(OP.DIVIDE) => try self.binary_op(Value.number, Value.number, callbacks.div),
+                        @intFromEnum(OP.SUBTRACT) => try self.binary_op(.number, .number, callbacks.sub),
+                        @intFromEnum(OP.MULTIPLY) => try self.binary_op(.number, .number, callbacks.mul),
+                        @intFromEnum(OP.DIVIDE) => try self.binary_op(.number, .number, callbacks.div),
                         @intFromEnum(OP.TRUE) => self.push(Value.init(true)),
                         @intFromEnum(OP.FALSE) => self.push(Value.init(false)),
                         @intFromEnum(OP.EQUAL) => self.push(Value.init(self.pop().eql(self.pop()))),
-                        @intFromEnum(OP.LESS) => try self.binary_op(Value.number, Value.bool, callbacks.less),
-                        @intFromEnum(OP.GREATER) => try self.binary_op(Value.number, Value.bool, callbacks.more),
+                        @intFromEnum(OP.LESS) => try self.binary_op(.number, .bool, callbacks.less),
+                        @intFromEnum(OP.GREATER) => try self.binary_op(.number, .bool, callbacks.more),
                         @intFromEnum(OP.NIL) => self.push(Value.init({})),
                         @intFromEnum(OP.NOT) => self.push(Value.init(!self.pop().isTruthy())),
                         else => return InterpreterError.CompileError,

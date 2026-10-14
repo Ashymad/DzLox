@@ -77,6 +77,21 @@ pub fn Packer(comptime MAX: u6) type {
     };
 }
 
+pub fn to_u64(val: anytype) u64 {
+    const T = @TypeOf(val);
+    return if (comptime utils.is_type(T, "pointer"))
+        @intFromPtr(val)
+    else
+        @intCast(@as(@Int(.unsigned, @bitSizeOf(T)), @bitCast(val)));
+}
+
+pub fn from_u64(T: type, val: u64) T {
+    return if (comptime utils.is_type(T, "pointer"))
+        @ptrFromInt(val)
+    else
+        @bitCast(@as(@Int(.unsigned, @bitSizeOf(T)), @intCast(val)));
+}
+
 pub fn NaNBox(comptime fields: anytype) type {
     const Fields = @TypeOf(fields);
 
@@ -136,7 +151,6 @@ pub fn NaNBox(comptime fields: anytype) type {
         const Self = @This();
 
         pub const Type = utils.enumFromStruct(Fields, usize);
-        pub const Error = error{WrongTag};
 
         value: u64,
 
@@ -150,15 +164,15 @@ pub fn NaNBox(comptime fields: anytype) type {
 
         pub fn of(comptime tag: Type, val: typeof(tag)) Self {
             return Self{
-                .value = flag(tag).encode(utils.typepun(u64, val)),
+                .value = flag(tag).encode(to_u64(val)),
             };
         }
 
-        pub fn to(self: *const Self, comptime tag: Type) !typeof(tag) {
+        pub fn to(self: *const Self, comptime tag: Type) ?typeof(tag) {
             return if (self.is(tag))
-                utils.typepun(typeof(tag), flag(tag).decode(self.value))
+                from_u64(typeof(tag), flag(tag).decode(self.value))
             else
-                Error.WrongTag;
+                null;
         }
 
         pub fn is(self: *const Self, comptime tag: Type) bool {

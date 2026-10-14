@@ -109,10 +109,10 @@ pub fn Obj(Fields: type) type {
             const T = @TypeOf(arg);
 
             return switch (T) {
-                Value => switch (arg) {
-                    .obj => |o| Self.from(o),
-                    else => null,
-                },
+                Value => if (arg.cast_if(.obj)) |o|
+                    Self.from(o)
+                else
+                    null,
                 *Self => arg,
                 else => if (comptime Self.is_child(T)) arg.cast() else null,
             };

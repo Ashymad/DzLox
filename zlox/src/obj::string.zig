@@ -107,13 +107,13 @@ pub fn String(fields: anytype) type {
             return @intFromPtr(self) == @intFromPtr(other);
         }
         pub fn get(self: *const Self, index: value.Value) Error!value.Value {
-            if (!index.is(value.Value.number) or index.number >= @as(
-                value.Value.tagType(value.Value.number),
+            if (!index.is(.number) or index.get(.number) >= @as(
+                value.Value.tagType(.number),
                 @floatFromInt(self.len),
-            ) or index.number < 0) {
+            ) or index.get(.number) < 0) {
                 return Error.IndexOutOfBounds;
             }
-            return value.Value.init(self.data()[@intFromFloat(index.number)]);
+            return value.Value.init(self.data()[@intFromFloat(index.get(.number))]);
         }
 
         fn prehash(arg: Arg) struct { len: usize, hash: u32 } {

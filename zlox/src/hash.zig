@@ -40,7 +40,7 @@ pub fn hash_t(T: type) fn (T) u32 {
                 return val.hash;
             }
         }.fun,
-        *Obj, *const Obj  => struct {
+        *Obj, *const Obj => struct {
             pub fn fun(val: T) u32 {
                 return switch (val.type) {
                     .String => hash_append_t([]const u8)(hash(val.cast(.String) catch unreachable), "\x01"),
@@ -50,13 +50,18 @@ pub fn hash_t(T: type) fn (T) u32 {
         }.fun,
         Value => struct {
             pub fn fun(val: T) u32 {
-                return switch(val) {
-                    .number => |v| hash_append_t([]const u8)(hash(v), "\x01"),
-                    .char => |v| hash_t([]const u8)(&[_]u8{v, 2}),
-                    .bool => |v| hash_append_t([]const u8)(hash(v), "\x03"),
-                    .nil => hash_t([]const u8)("\x04"),
-                    .obj => |v| hash_append_t([]const u8)(hash(v), "\x05"),
-                };
+                return if (val.cast_if(.number)) |v|
+                    hash_append_t([]const u8)(hash(v), "\x01")
+                else if (val.cast_if(.char)) |v|
+                    hash_t([]const u8)(&[_]u8{ v, 2 })
+                else if (val.cast_if(.bool)) |v|
+                    hash_append_t([]const u8)(hash(v), "\x03")
+                else if (val.is(.nil))
+                    hash_t([]const u8)("\x04")
+                else if (val.cast_if(.obj)) |v|
+                    hash_append_t([]const u8)(hash(v), "\x05")
+                else
+                    unreachable;
             }
         }.fun,
         else => struct {

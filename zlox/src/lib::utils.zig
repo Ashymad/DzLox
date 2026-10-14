@@ -178,13 +178,3 @@ pub fn zeroed(typ: type) typ {
     zero(&ret);
     return ret;
 }
-
-pub fn typepun(Ret: type, val: anytype) Ret {
-    if (@alignOf(@TypeOf(val)) < @alignOf(Ret)) {
-        var ret = zeroed(Ret);
-        @as(*@TypeOf(val), @ptrCast(&ret)).* = val;
-        return ret;
-    } else {
-        return @as(*const Ret, @ptrCast(&val)).*;
-    }
-}

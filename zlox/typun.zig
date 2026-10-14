@@ -1,8 +1,9 @@
 const std = @import("std");
 const utils = @import("src/lib::utils.zig");
 const assert = std.debug.assert;
-const NaNBox = @import("src/lib::nanbox.zig").NaNBox;
-const Packer = @import("src/lib::nanbox.zig").Packer;
+const nanbox = @import("src/lib::nanbox.zig");
+const NaNBox = nanbox.NaNBox;
+const Packer = nanbox.Packer;
 
 fn typetypeof(Box: type, comptime tag: Box.Type) type {
     const T = Box.typeof(tag);
@@ -30,12 +31,14 @@ pub fn tst(Box: type, comptime tag: Box.Type, val: typetypeof(Box, tag)) !void {
     const T = Box.typeof(tag);
 
     std.debug.print("Test tag {s}, type {s}, value {any}\n", .{ @tagName(tag), @typeName(T), val });
+    std.debug.print("B64: {b:064}\n", .{nanbox.to_u64(val)});
 
     const ret = if (comptime utils.is_type(T, "pointer"))
-        (try dbg(Box.of(tag, &val), tag).to(tag)).*
+        dbg(Box.of(tag, &val), tag).to(tag).?.*
     else
-        try dbg(Box.of(tag, val), tag).to(tag);
+        dbg(Box.of(tag, val), tag).to(tag).?;
 
+    std.debug.print("Ret is {any}\n", .{ret});
     assert(ret == val);
 }
 
