@@ -1,35 +1,64 @@
 const utils = @import("lib::utils.zig");
 
-pub fn Iterator(Type: type) type {
+fn has_fn(Type: type, comptime field: []const u8) bool {
+    return @hasDecl(Type, field) and utils.is_type(@TypeOf(@field(Type, field)), "fn");
+}
+
+fn is(comptime thing: anytype) ?@TypeOf(thing) {
+    return if (@TypeOf(thing) == void) null else thing;
+}
+
+fn errorout(Type: type, Mod: type, comptime field: []const u8) if (has_fn(Mod, field)) @TypeOf(@field(Mod, field)) else fn (Type) noreturn {
+    return if (has_fn(Mod, field)) @field(Mod, field) else struct {
+        pub fn fun(_: Type) noreturn {
+            @compileError("This iterator doesn't support the " ++ field ++ " method");
+        }
+    }.fun;
+}
+
+pub fn Iterator(_Type: type, Mod: type) type {
     return struct {
         const Self = @This();
+        pub const Type = _Type;
+
+        const _get = if (has_fn(Mod, "get")) Mod.get;
+        const _next = errorout(Type, Mod, "next");
+        const _prev = errorout(Type, Mod, "prev");
+
+        pub const Return = if (is(_get)) |get| utils.fn_return(get).? else Type;
 
         cur: ?Type = null,
         end: ?Type = null,
-        fwd: bool = true,
 
-        pub fn next(self: *Self) ?Type {
-            if (self.cur) |cur| {
-                self.cur = if (cur == self.end)
-                    null
-                else if (self.fwd)
-                    cur + 1
-                else
-                    cur - 1;
-                return cur;
+        fn proceed(call: fn (Self.Type) Self.Type) fn (*Self) ?Self.Return {
+            return struct {
+                pub fn lmbd(self: *Self) ?Self.Return {
+                    if (self.cur) |cur| {
+                        self.cur = if (cur == self.end)
+                            null
+                        else
+                            call(cur);
+                        return if (comptime is(_get)) |get| get(cur) else cur;
+                    }
+                    return null;
+                }
+            }.lmbd;
+        }
+
+        pub const next = proceed(_next);
+        pub const prev = proceed(_prev);
+
+        pub const rev = struct {
+            pub fn rev(self: *const Self) Iterator(Type, struct {
+                pub const next = _prev;
+                pub const prev = _next;
+                pub const get = _get;
+            }) {
+                return .{ .cur = self.end, .end = self.cur };
             }
-            return null;
-        }
+        }.rev;
 
-        pub fn reverse(self: *const Self) Self {
-            return .{
-                .cur = self.end,
-                .end = self.cur,
-                .fwd = !self.fwd,
-            };
-        }
-
-        pub fn finish(self: *Self) void {
+        pub fn stop(self: *Self) void {
             self.cur = null;
             self.end = null;
         }
@@ -37,7 +66,18 @@ pub fn Iterator(Type: type) type {
 }
 
 pub fn Slice(Type: type) type {
-    return Iterator(utils.with_size(Type, .many));
+    const Ptr = utils.with_size(Type, .many);
+    return Iterator(Ptr, struct {
+        pub fn next(p: Ptr) Ptr {
+            return p + 1;
+        }
+        pub fn prev(p: Ptr) Ptr {
+            return p - 1;
+        }
+        pub fn get(p: Ptr) Type {
+            return p.*;
+        }
+    });
 }
 
 pub fn slice(val: anytype) Slice(@TypeOf(val)) {
@@ -55,7 +95,18 @@ pub fn slice(val: anytype) Slice(@TypeOf(val)) {
         };
 }
 
-pub fn range(from: anytype, to: @TypeOf(from)) Iterator(@TypeOf(from)) {
+pub fn Range(Type: type) type {
+    return Iterator(Type, struct {
+        pub fn next(t: Type) Type {
+            return t + 1;
+        }
+        pub fn prev(p: Type) Type {
+            return p - 1;
+        }
+    });
+}
+
+pub fn range(from: anytype, to: @TypeOf(from)) Range(@TypeOf(from)) {
     return if (to <= from)
         .{}
     else
@@ -74,9 +125,10 @@ pub fn zip_longest(lhs: anytype, rhs: anytype) struct {
     rhs: Rhs,
 
     pub fn next(self: *Self) ?struct {
-        lhs: utils.fn_return(Lhs.next).?,
-        rhs: utils.fn_return(Rhs.next).?,
+        lhs: ?Lhs.Return,
+        rhs: ?Lhs.Return,
     } {
+        @setEvalBranchQuota(2_000);
         const lhsn = self.lhs.next();
         const rhsn = self.rhs.next();
         return if (lhsn == null and rhsn == null)
@@ -97,9 +149,10 @@ pub fn zip(lhs: anytype, rhs: anytype) struct {
     rhs: Rhs,
 
     pub fn next(self: *Self) ?struct {
-        lhs: utils.fn_return(Lhs.next).?.optional.child,
-        rhs: utils.fn_return(Rhs.next).?.optional.child,
+        lhs: Rhs.Return,
+        rhs: Lhs.Return,
     } {
+        @setEvalBranchQuota(2_000);
         if (self.lhs.next()) |lhsn|
             if (self.rhs.next()) |rhsn|
                 return .{ .lhs = lhsn, .rhs = rhsn }

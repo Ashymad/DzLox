@@ -307,7 +307,7 @@ pub const VM = struct {
                     .slot = slot,
                     .closed = closed,
                 });
-                try iter.push(new);
+                try self.upvalues.push(&iter, new);
                 return new;
             }
 
@@ -318,7 +318,7 @@ pub const VM = struct {
                     if (upval.slot < slot) break;
 
                     try upval.close(self.vm.allocator);
-                    iter.pop();
+                    self.upvalues.pop(&iter);
                 }
             }
 

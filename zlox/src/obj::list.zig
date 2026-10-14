@@ -61,7 +61,7 @@ pub fn List(fields: anytype) type {
             if (!index.is(Value.number) or index.number >= @as(Value.tagType(Value.number), @floatFromInt(lis.len()))) {
                 return;
             }
-            _ = lis.pop(@intFromFloat(index.number)) catch return;
+            _ = lis.pop(@as(isize, @intFromFloat(index.number))) catch return;
         }
 
         pub fn get(self: *const Self, index: Value) Error!Value {
@@ -78,7 +78,7 @@ pub fn List(fields: anytype) type {
                 return Error.InvalidArgument;
             }
             _ = lis.set(@intFromFloat(index.number), val) catch
-                try lis.push(@intFromFloat(index.number), val);
+                try lis.push(@as(isize, @intFromFloat(index.number)), val);
         }
     };
 }

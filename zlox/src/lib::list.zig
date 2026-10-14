@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const utils = @import("lib::utils.zig");
+const iterator = @import("lib::iterator.zig");
 
 pub fn List(T: type) type {
     return struct {
@@ -60,52 +61,20 @@ pub fn List(T: type) type {
             }
         };
 
-        pub fn Iterator(@"const": bool) type {
-            return struct {
-                const Super = utils.mod_ptr_t(*Self, "const", @"const");
-                const This = utils.mod_ptr_t(*Element, "const", @"const");
+        pub fn Iterator(list: type) type {
+            const El = utils.copy_const(list, *Element);
 
-                super: Super,
-                this: ?This,
-
-                pub fn new(sup: Super) @This() {
-                    return .{
-                        .super = sup,
-                        .this = sup.tip,
-                    };
+            return iterator.Iterator(El, struct {
+                pub fn next(el: El) El {
+                    return el.next;
                 }
-
-                pub fn next(self: *@This()) ?Value {
-                    if (self.this) |el| {
-                        self.this = if (el.next == self.super.tip) null else el.next;
-                        return el.val;
-                    } else {
-                        return null;
-                    }
+                pub fn prev(el: El) El {
+                    return el.prev;
                 }
-
-                pub fn pop(self: *@This()) void {
-                    if (@"const") @compileError("Cannot call pop() on a const Iterator");
-
-                    const el = if (self.this) |el| el.prev else self.super.tip orelse return;
-
-                    if (self.this == el) self.this = null;
-
-                    self.super.del(el);
+                pub fn get(el: El) Value {
+                    return el.val;
                 }
-
-                pub fn push(self: *@This(), val: Value) !void {
-                    if (@"const") @compileError("Cannot call push() on a const Iterator");
-
-                    if (self.this) |el| {
-                        self.super.retip(el, try self.super.insert(.prev, el, val));
-                    } else if (self.super.tip) |el| {
-                        _ = try self.super.insert(.prev, el, val);
-                    } else {
-                        try self.super.begin(val);
-                    }
-                }
-            };
+            });
         }
 
         _len: isize,
@@ -113,8 +82,11 @@ pub fn List(T: type) type {
 
         gpa: std.mem.Allocator,
 
-        pub fn iter(self: anytype) Iterator(utils.is_const(@TypeOf(self))) {
-            return Iterator(utils.is_const(@TypeOf(self))).new(self);
+        pub fn iter(self: anytype) Iterator(@TypeOf(self)) {
+            return .{
+                .cur = self.tip,
+                .end = if (self.tip) |tip| tip.prev else null,
+            };
         }
 
         pub fn init(gpa: std.mem.Allocator) Self {
@@ -182,15 +154,6 @@ pub fn List(T: type) type {
             el.del(self.gpa);
         }
 
-        pub fn pop(self: *Self, idx: isize) Error!Value {
-            const el = try self.at(idx);
-            const ret = el.val;
-
-            self.del(el);
-
-            return ret;
-        }
-
         fn begin(self: *Self, val: Value) !void {
             if (self.tip) |_| @panic("This function can only be called on an empty list");
 
@@ -213,7 +176,50 @@ pub fn List(T: type) type {
             if (self.tip == old) self.tip = new;
         }
 
-        pub fn push(self: *Self, idx: isize, val: Value) Error!void {
+        pub fn push(self: *Self, idx: anytype, val: Value) Error!void {
+            return switch (@TypeOf(idx)) {
+                isize, comptime_int => self.push_idx(idx, val),
+                *Iterator(*Self) => self.push_iter(idx, val),
+                else => @compileError("Invalid type: " ++ @typeName(@TypeOf(idx))),
+            };
+        }
+
+        pub fn pop(self: *Self, idx: anytype) if (@TypeOf(idx) == *Iterator(*Self)) void else Error!Value {
+            return switch (@TypeOf(idx)) {
+                isize, comptime_int => self.pop_idx(idx),
+                *Iterator(*Self) => self.pop_iter(idx),
+                else => @compileError("Invalid type: " ++ @typeName(@TypeOf(idx))),
+            };
+        }
+
+        pub fn pop_idx(self: *Self, idx: isize) Error!Value {
+            const el = try self.at(idx);
+            const ret = el.val;
+
+            self.del(el);
+
+            return ret;
+        }
+
+        pub fn pop_iter(self: *Self, itr: *Iterator(*Self)) void {
+            const el = if (itr.cur) |el| el.prev else itr.end orelse return;
+
+            if (itr.cur == el) itr.stop();
+
+            self.del(el);
+        }
+
+        pub fn push_iter(self: *Self, itr: *Iterator(*Self), val: Value) !void {
+            if (itr.cur) |el| {
+                self.retip(el, try self.insert(.prev, el, val));
+            } else if (itr.end) |el| {
+                _ = try self.insert(.prev, el, val);
+            } else {
+                try self.begin(val);
+            }
+        }
+
+        pub fn push_idx(self: *Self, idx: isize, val: Value) Error!void {
             const len1 = self._len + 1;
 
             if (-len1 <= idx and idx < len1) {

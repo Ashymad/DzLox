@@ -185,7 +185,7 @@ pub const GC = struct {
         var iter = self.objs.iter();
         while (iter.next()) |obj| {
             if (obj.fields.color == .White) {
-                iter.pop();
+                self.objs.pop(&iter);
                 dbg_obj("O", "free", obj, false);
                 switch (obj.type) {
                     inline else => |tp| self.allocated -= @sizeOf(tp.get()),

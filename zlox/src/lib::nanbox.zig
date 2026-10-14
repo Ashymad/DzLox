@@ -49,7 +49,7 @@ pub fn Packer(comptime MAX: u6) type {
 
                 var iter = iterator.zip_longest(
                     iterator.range(idx, MAX),
-                    iterator.range(@as(u6, 0), idx).reverse(),
+                    iterator.range(@as(u6, 0), idx).rev(),
                 );
 
                 while (iter.next()) |el| {
@@ -57,14 +57,14 @@ pub fn Packer(comptime MAX: u6) type {
                         if (eq(self.matrix[i], ret & mask(i))) |val| {
                             self.matrix[i] = inc(val, i);
                         } else {
-                            iter.lhs.finish();
+                            iter.lhs.stop();
                         }
                     }
                     if (el.rhs) |i| {
                         if (eq(self.matrix[i], ret & mask(i))) |_| {
                             self.matrix[i] = self.matrix[idx];
                         } else {
-                            iter.rhs.finish();
+                            iter.rhs.stop();
                         }
                     }
                 }
